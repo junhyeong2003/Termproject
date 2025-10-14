@@ -1,5 +1,3 @@
-//chat_app/db.js
-
 const mysql = require('mysql2/promise'); // promise API 사용
 
 const poolConfig = {
@@ -13,23 +11,22 @@ const poolConfig = {
     queueLimit: 0                   // 대기열의 최대 수 (0은 무한대)
 };
 
-// 연결 풀 생성
 const pool = mysql.createPool(poolConfig);
 
 // DB 연결 테스트 함수 (서버 시작 시 한 번 호출)
 async function testDbConnection() {
     try {
-        await pool.getConnection(); // 풀에서 연결 하나를 가져와 테스트
-        console.log(' MySQL 연결 풀 생성 및 테스트 성공! ');
-    } catch (err) {
+        await pool.getConnection(); // 연결을 가져올 때까지 멈춰있음
+        console.log(' MySQL 연결 풀 생성 및 테스트 성공 ');
+    } catch (err) { //문제가 생기면 이 블록으로 이동함
         console.error(' MySQL 연결 풀 오류:', err.code, err.message);
-        // 서버 시작을 중지하거나, 에러 처리 로직을 추가할 수 있습니다.
     }
 }
 
 // 서버 실행 시 연결 테스트
 testDbConnection();
 
-module.exports = pool; // server.js에서 이 연결 풀을 사용할 수 있도록 내보냅니다.
+module.exports = pool; // server.js에서 이 연결 풀을 사용할 수 있도록 내보낸다.
 
-//Dbeaver를 먼저 열어야됨
+
+//mysql과 Dbeaver를 먼저 세팅하고 터미널을 열어야 한다.
