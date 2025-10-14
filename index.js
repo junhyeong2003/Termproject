@@ -1,22 +1,16 @@
 const socket = io();
 
-// [새로운 요소] 로그인 관련 DOM 요소
 const loginForm = document.getElementById("loginForm");
 const nicknameInput = document.getElementById("nicknameInput");
 const roomSelect = document.getElementById("roomSelect");
 
-// [새로운 요소] 채팅 영역 관련 DOM 요소
 const chatArea = document.getElementById("chatArea");
 const roomInfo = document.getElementById("roomInfo");
 
-// [기존 요소] 메시지 전송 관련 DOM 요소
 const form = document.getElementById("form");
 const input = document.getElementById("input");
 const messages = document.getElementById("messages");
 
-// ----------------------------------------
-// 1. 닉네임 & 방 입장 로직
-// ----------------------------------------
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const nickname = nicknameInput.value.trim();
@@ -35,46 +29,31 @@ socket.on("login success", (data) => {
   roomInfo.textContent = `현재 방: ${data.room} (당신의 닉네임: ${data.nickname})`;
 });
 
-// ----------------------------------------
-// 2. [추가] 과거 메시지 로드 요청 및 수신 로직
-// ----------------------------------------
-
-// 서버로부터 메시지 로드 준비 완료 이벤트를 받으면 요청
-socket.on("ready to load messages", (data) => {
-    // 서버에 과거 메시지 조회를 요청합니다.
+socket.on("ready to load messages", (data) => { //서버에서 신호가 오면, 기록 요청 시작
     socket.emit("get past messages", { room: data.room });
 });
 
-// 💡 [추가] 서버로부터 과거 메시지 목록을 수신
-socket.on("past messages", (messages) => {
+socket.on("past messages", (messages) => { //이전 메시지 목록을 배열로 받음
     messages.forEach(msg => {
-        // DB에서 받은 user_nickname, message_text 필드 사용
-        appendMessage(msg.user_nickname, msg.message_text); 
+        appendMessage(msg.user_nickname, msg.message_text);  //하나씩 꺼내서 오래된 메시지 부터 출력한다
     });
     
-    appendNotification("✅ 과거 대화 기록을 불러왔습니다.");
+    appendNotification("과거 대화 기록을 불러왔습니다.");
 });
 
-// ----------------------------------------
-// 3. 메시지 전송 로직
-// ----------------------------------------
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   const msg = input.value.trim();
   
   if (msg) {
-    socket.emit("chat message", msg);
-    // [유지] 자기 메시지는 로컬에서 즉시 출력
-    appendMessage(socket.nickname, msg); 
+    socket.emit("chat message", msg); //입력한 메시지를 서버로 보낸다. 서버는 메시지를 DB에 저장하고, 다른 사용자들에게 브로드캐스팅함
+    appendMessage(socket.nickname, msg); //서버가 다른 사용자에게 전파하는 동안 본인 화면에는 메시지를 바로 추가한다.
     
-    input.value = "";
+    input.value = ""; //메시지 전송 후, 입력창 리셋
   }
 });
 
-// 4. [수정] 메시지 수신 로직 (오타 및 변수 문제 해결)
 socket.on("chat message", (data) => { 
-  // 💡 [수정] 서버에서 보낸 객체 {nickname, message}를 받음
-  // 💡 [수정] appendMessages(nickname, msg) 오타 대신 appendMessage(data.nickname, data.message) 사용
   appendMessage(data.nickname, data.message);
 });
 
@@ -82,14 +61,11 @@ socket.on("notification", (msg) => {
   appendNotification(msg);
 });
 
-// ----------------------------------------
-// 5. [기존] 헬퍼 함수
-// ----------------------------------------
 function appendMessage(nickname, message) {
   const li = document.createElement("li");
   li.innerHTML = `<strong>${nickname}</strong>: ${message}`; 
   messages.appendChild(li);
-  messages.scrollTop = messages.scrollHeight; 
+  messages.scrollTop = messages.scrollHeight;  //메시지가 추가 될 때마다 채팅 목록 스크롤을 맨 아래로 내림
 }
 
 function appendNotification(msg) {
