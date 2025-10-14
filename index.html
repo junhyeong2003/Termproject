@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>실시간 채팅</title> 
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; display: flex; flex-direction: column; align-items: center; }
+
+    /*로그인*/
+    #loginForm {padding: 15px; border: 1px solid #ccc; border-radius: 5px; margin-top: 50px;}
+    #loginForm input, #loginForm select, #loginForm button { margin: 5px; padding: 10px; width: 200px; }
+
+    /* 채팅 영역 초기 숨김 */
+    #chatArea { display: none; width: 100%; max-width: 600px; margin-top: 20px; }
+    #roomInfo { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; text-align: center; }
+
+    /* 메시지 스타일 */
+    #messages { list-style: none; padding: 0; margin: 0; max-height: 400px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; }
+    #messages li {padding: 5px 10px; border-bottom: 1px solid #eee; }
+    #messages li:last-child {border-bottom: none; }
+    
+    /* 알림 메시지 스타일 */
+    #messages li.notification {font-style: italic; color: #868; text-align: center; background-color: #f7f7f7;} 
+
+    /* 입력 폼 스타일 */
+    #form { display: flex; margin-top: 10px; }
+    #input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; }
+    #form button { width: 80px; padding: 10px; background-color: #47a7f0; color: white; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>실시간 채팅</h2>
+  
+  <form id="loginForm">
+    <h3>채팅방 입장</h3>
+    <input id="nicknameInput" autocomplete="off" placeholder="닉네임 입력" required /><br>
+    <select id="roomSelect">
+      <option value="public_room_1">공개 채팅방 1</option>
+      <option value="dev_room">개발자 전용방</option>
+      <option value="test_room">테스트 방</option>
+    </select><br>
+    <button type="submit">입장하기</button>
+  </form>
+
+  <div id="chatArea">
+    <p id="roomInfo">현재 방: </p>
+    <ul id="messages"></ul>
+    <form id="form">
+      <input id="input" autocomplete="off" placeholder="메시지 입력..." />
+      <button>전송</button>
+    </form>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="index.js"></script>
+</body>
+</html>
