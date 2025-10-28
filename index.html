@@ -23,9 +23,45 @@
     #messages li.notification {font-style: italic; color: #868; text-align: center; background-color: #f7f7f7;} 
 
     /* 입력 폼 스타일 */
-    #form { display: flex; margin-top: 10px; }
+    #form { display: flex; margin-top: 10px; align-items: center; } /* align-items 추가 */
     #input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; }
     #form button { width: 80px; padding: 10px; background-color: #47a7f0; color: white; border: none; cursor: pointer; }
+
+    /*귓속말 구분 스타일*/
+    #messages li.personal {font-style: italic;padding: 8px 10px;}
+    #messages li.personal.sent {
+    color: #007bff; background-color: #e6f3ff; text-align: right;}
+    #messages li.personal.received {
+    color: #880000; background-color: #fff0f0; text-align: left;}
+    
+    /* 파일 선택 버튼 스타일 */
+    #fileButton {
+      width: 40px; /* 너비 축소 */
+      background-color: #6c757d; /* 회색 계열 */
+      margin-right: 5px; /* 오른쪽 여백 */
+      padding: 10px 0; /* 패딩 조정 */
+    }
+
+    /* 채팅창의 이미지 미리보기 스타일 */
+    img.chat-image {
+      max-width: 200px;
+      max-height: 200px;
+      vertical-align: middle;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-top: 5px;
+    }
+    
+    /* 파일 다운로드 링크 스타일 */
+    a.file-download {
+      color: #b1b5b9;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    a.file-download:hover {
+      text-decoration: underline;
+    }
+
   </style>
 </head>
 <body>
@@ -42,15 +78,26 @@
     <button type="submit">입장하기</button>
   </form>
 
-  <div id="chatArea">
-    <p id="roomInfo">현재 방: </p>
-    <ul id="messages"></ul>
-    <form id="form">
-      <input id="input" autocomplete="off" placeholder="메시지 입력..." />
-      <button>전송</button>
-    </form>
-  </div>
-
+  <div id="chatArea" style="display:none;">
+    <div id="roomInfo"></div>
+    <div style="display: flex;">
+        <div style="flex-grow: 1;">
+            <ul id="messages"></ul>
+            
+            <form id="form" action="">
+                <input type="file" id="fileInput" style="display: none;">
+                <button type="button" id="fileButton">📎</button>
+                
+                <input id="input" autocomplete="off" placeholder="메시지 입력..." />
+                <button type="submit">전송</button>
+            </form>
+            </div>
+        <div style="width: 200px; padding-left: 10px; border-left: 1px solid #ccc;">
+            <ul id="userList">
+            </ul>
+        </div>
+    </div>
+</div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="index.js"></script>
 </body>
