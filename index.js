@@ -16,6 +16,47 @@ const messages = document.getElementById("messages");
 const fileInput = document.getElementById("fileInput");
 const fileButton = document.getElementById("fileButton");
 
+const typingNotificationElement = document.getElementById("typingNotification"); 
+let isTyping = false;
+let typingTimeout = undefined;
+const typingUsers = {}; // { nickname: true, ... }
+
+function updateTypingNotification() {
+    const nicknames = Object.keys(typingUsers); //현재 입력중인 사용자의 이름만 배열로 저장함
+    if (nicknames.length > 0) {
+        let text = nicknames.join(', '); //배열을 ,로 구분한 한 문장으로 만듦
+        if (nicknames.length > 1) { //여러 명이 입력 중일때 구분
+            text += '님들이';
+        } else {
+            text += '님이';
+        }
+        typingNotificationElement.textContent = `${text} 메시지를 입력 중입니다...`;
+        typingNotificationElement.style.display = 'block';
+    } else {
+        typingNotificationElement.textContent = '';
+        typingNotificationElement.style.display = 'none';
+    }
+    messages.scrollTop = messages.scrollHeight; 
+}
+
+input.addEventListener('input', () => {
+    if (!socket.nickname || !socket.room) return; // 로그인 안됐으면 무시
+
+    if (!isTyping) { //방금 입력 시작했으면
+        isTyping = true;
+        socket.emit("typing"); // 서버로 입력 시작 알림
+    }
+    
+    if (typingTimeout) { // 사용자가 계속 입력중이면 타이머 초기화
+        clearTimeout(typingTimeout);
+    }
+
+    typingTimeout = setTimeout(() => {
+        isTyping = false;
+        socket.emit("stop typing"); // 3초 후에 서버로 입력 중지 알림
+    }, 3000);
+});
+
 loginForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const nickname = nicknameInput.value.trim();
@@ -41,8 +82,8 @@ socket.on("ready to load messages", (data) => {
     socket.emit("get past messages", { room: data.room });
 });
 
-socket.on("past messages", (messages) => {
-    messages.forEach(msg => {
+socket.on("past messages", (rows) => {
+    rows.forEach(msg => {
         // 과거 메시지에 file_url이 있으면 파일 메시지로 처리
         if (msg.file_url) {
              appendFileMessage(msg);
@@ -67,6 +108,12 @@ form.addEventListener("submit", (e) => {
     }
     
     input.value = "";
+  }
+  
+  if(isTyping){
+      isTyping = false;
+      clearTimeout(typingTimeout);
+      socket.emit("stop typing"); // 메시지 전송 후, 입력 중 상태를 즉시 종료한다
   }
 });
 
@@ -94,14 +141,42 @@ socket.on("user list", (users) => {
     if(nickname === socket.nickname) {
       li.style.fontWeight = 'bold';
     }
+    
+    if (nickname !== socket.nickname) {
+        li.style.cursor = 'pointer'; // 귓속말 가능함을 시각적으로 표시
+        li.title = `우클릭하여 ${nickname}님에게 귓속말 보내기`;
+
+        li.addEventListener('contextmenu', (e) => { //contextmenu는 마우스 우클릭을 할 때 발생하는 이벤트
+            e.preventDefault(); //작성 안 하면 뒤로,새로고침 나타남
+            
+            input.value = `/w ${nickname} `; // 입력 필드에 귓속말 명령어 자동 채우기
+            input.focus(); //바로 메시지 입력하도록 입력창에 커서 강제이동
+        });
+    }
+    
     userListElement.appendChild(li);
   });
 });
 
+socket.on("typing notification", (data) => {
+    typingUsers[data.nickname] = true; // 사용자 입력 시작하면 알림
+    updateTypingNotification();
+});
+
+socket.on("stop typing notification", (data) => {
+    delete typingUsers[data.nickname]; //입력 끝나면 객체에서 삭제
+    updateTypingNotification();
+});
+
 socket.on("chat message", (data) => { 
+  if (data.nickname && typingUsers[data.nickname]) {
+      delete typingUsers[data.nickname]; // 메시지 수신 시, 해당 사용자가 입력 중 목록에 있었다면 제거
+      updateTypingNotification();
+  }
+    
   if (data.ispersonal) {
     appendpersonalMessage(data);
-  } else if (data.file_url) { // 서버의 DB 컬럼명과 일치하는 'file_url'로 확인
+  } else if (data.file_url) {
     appendFileMessage(data); 
   } else {
     appendMessage(data.nickname, data.message);
@@ -134,10 +209,10 @@ function appendpersonalMessage(data) {
   let textContent = '';
   
   if (data.type === 'sent_personal') {
-      textContent = `(나 → ${data.targetNickname}): ${data.message}`;
+      textContent = `(${data.targetNickname}에게 보낸 메시지): ${data.message}`;
       li.classList.add("sent"); 
   } else if (data.type === 'received_personal') {
-      textContent = `(${data.sender}님의 귓속말): ${data.message}`;
+      textContent = `(${data.sender}의 개인 메시지): ${data.message}`;
       li.classList.add("received"); 
   }
   
