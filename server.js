@@ -42,7 +42,7 @@ const storage = multer.diskStorage({
 const upload = multer({ 
     storage: storage,
     limits: { fileSize: 1024 * 1024 * 5 }, // 5MB 파일 크기 제한
-    fileFilter: fileFilter // 파일 타입 필터 적용
+    fileFilter: fileFilter 
 });
 
 function getUsersInRoom(room) {
@@ -68,14 +68,25 @@ io.on("connection", (socket) => {
     users[socket.id] = {nickname: nickname, room: room};
 
     socket.join(room);
-
     socket.broadcast.to(room).emit("notification", ` ${nickname}님이 입장하셨습니다.`);
-    //socket.id를 클라이언트로 전송하여 인증에 사용
-    socket.emit("login success", {room: room, nickname: nickname, socketId: socket.id});
-    
-    socket.emit("ready to load messages", {room: room});
 
+    socket.emit("login success", {room: room, nickname: nickname, socketId: socket.id});
+    socket.emit("ready to load messages", {room: room});
     broadcastUserList(room);
+  });
+
+  socket.on("typing", () => { //typing이벤트가 올 때마다 실행됨
+    const { room, nickname } = socket; //socket객체에서 필요한 정보만 가져옴
+    if (room && nickname) { //하나라도 없으면 실행하지 않음
+      socket.broadcast.to(room).emit("typing notification", { nickname: nickname });
+    } //본인을 제외하고 같은 채팅방에 있는 사용자에게만 typing notification이벤트를 전송함
+  });
+
+  socket.on("stop typing", () => {
+    const { room, nickname } = socket;
+    if (room && nickname) {
+      socket.broadcast.to(room).emit("stop typing notification", { nickname: nickname });
+    }
   });
 
   socket.on("get past messages", async (data) => {
@@ -201,4 +212,3 @@ app.post('/upload', upload.single('chatFile'), async (req, res) => {
 server.listen(3000, () => {
   console.log("서버 실행중  http://localhost:3000");
 });
-
