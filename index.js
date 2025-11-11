@@ -47,7 +47,7 @@ input.addEventListener('input', () => {
         socket.emit("typing"); // 서버로 입력 시작 알림
     }
     
-    if (typingTimeout) { // 사용자가 계속 입력중이면 타이머 초기화
+    if (typingTimeout) { // 사용자가 이전에 설정한 타이머가 있다면 타이머 취소
         clearTimeout(typingTimeout);
     }
 
@@ -283,3 +283,4 @@ function appendFileMessage(data) {
     messages.appendChild(li);
     messages.scrollTop = messages.scrollHeight;
 }
+
