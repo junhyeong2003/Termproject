@@ -4,28 +4,78 @@
   <meta charset="UTF-8">
   <title>실시간 채팅</title> 
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; display: flex; flex-direction: column; align-items: center; }
+    body { 
+      font-family: Arial, Helvetica, sans-serif; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      min-width: 650px; /* PC에서 창을 줄여도 내용이 잘리지 않도록 최소 너비 지정 */
+      overflow-x: auto; /* 650px보다 작아지면 가로 스크롤 생성 */
+    }
 
     /*로그인*/
     #loginForm {padding: 15px; border: 1px solid #ccc; border-radius: 5px; margin-top: 50px;}
     #loginForm input, #loginForm select, #loginForm button { margin: 5px; padding: 10px; width: 200px; }
 
     /* 채팅 영역 초기 숨김 */
-    #chatArea { display: none; width: 100%; max-width: 600px; margin-top: 20px; }
+    #chatArea { 
+      display: none; 
+      width: 600px;       /* 채팅 영역 고정 너비 */
+      min-width: 600px;   /* 최대 축소를 600px로 설정 */
+      margin-top: 20px; 
+    }
     #roomInfo { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; text-align: center; }
 
-    /* 메시지 스타일 */
-    #messages { list-style: none; padding: 0; margin: 0; max-height: 400px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; }
-    #messages li {padding: 5px 10px; border-bottom: 1px solid #eee; }
+  #messages { 
+    list-style: none; padding: 0; margin: 0; max-height: 400px; overflow-y: scroll; 
+    border: 1px solid #ddd; padding: 10px; background-color: #f9f9f9; /* 배경색 추가 */
+  }
+    #messages li {
+    padding: 8px 10px; margin-bottom: 8px; border-bottom: none; 
+    clear: both; /* 양쪽 정렬 후, 강제 줄 바꿈 */
+    display: table; /* 버블이 내용만큼만 공간을 차지하도록 설정 */
+    max-width: 75%; /* 메시지 버블 최대 너비 */
+    border-radius: 12px; /* 모서리를 둥글게 만들어 버블 형태 */
+    position: relative;
+    line-height: 1.4;
+  }
     #messages li:last-child {border-bottom: none; }
+
+  /* 상대방 메시지 (기본) */
+  #messages li.other-message {
+    background-color: #ffffff; 
+    border: 1px solid #e0e0e0;
+    float: left; /* 왼쪽 정렬 */
+    text-align: left;
+  }
+  
+  /* 내 메시지 */
+  #messages li.my-message {
+    background-color: #dcf8c6; /* 연한 녹색/파란색 */
+    float: right; /* 오른쪽 정렬 */
+    text-align: left;
+  }
+
+  /* 타임스탬프 스타일 */
+  .timestamp {
+    display: block; /* 줄 바꿈 처리 */
+    font-size: 0.75em;
+    color: #888;
+    margin-top: 3px;
+    text-align: right; /* 버블 내에서 오른쪽 정렬 */
+  }
     
     /* 알림 메시지 스타일 */
-    #messages li.notification {font-style: italic; color: #868; text-align: center; background-color: #f7f7f7;} 
+    #messages li.notification {
+    font-style: italic; color: #868; text-align: center; background-color: transparent; 
+    border: none; border-bottom: 1px dashed #ccc; padding: 4px 0; margin: 10px auto;
+    width: 100%;
+  } 
 
     /* 입력 폼 스타일 */
-    #form { display: flex; margin-top: 10px; align-items: center; } /* align-items 추가 */
-    #input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; }
-    #form button { width: 80px; padding: 10px; background-color: #47a7f0; color: white; border: none; cursor: pointer; }
+    #form { display: flex; margin-top: 10px; align-items: stretch; /* 세로 정렬 맞추기 */ }
+    #input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; font-size: 1em; }
+    #form button[type="submit"] { width: 80px; padding: 10px; background-color: #47a7f0; color: white; border: none; cursor: pointer; }
 
     /*귓속말 구분 스타일*/
     #messages li.personal {font-style: italic;padding: 8px 10px;}
@@ -34,12 +84,10 @@
     #messages li.personal.received {
     color: #880000; background-color: #fff0f0; text-align: left;}
     
-    /* 파일 선택 버튼 스타일 */
-    #fileButton {
-      width: 40px; /* 너비 축소 */
-      background-color: #6c757d; /* 회색 계열 */
-      margin-right: 5px; /* 오른쪽 여백 */
-      padding: 10px 0; /* 패딩 조정 */
+    #fileButton { /* 파일 버튼은 입력창 높이에 맞게 설정 */
+    background-color: #6c757d; 
+    margin-right: 5px; 
+    width: 40px;
     }
 
     /* 채팅창의 이미지 미리보기 스타일 */
@@ -71,6 +119,11 @@
         background-color: #f9f9f9;
         border-radius: 3px;
         height: 1.2em; /* 공간 확보 */
+    }
+
+    #messages.drag-over { /* 드래그 앤 드롭 영역 */
+        border: 3px dashed #007bff;
+        background-color: #e6f3ff;
     }
 
   </style>
