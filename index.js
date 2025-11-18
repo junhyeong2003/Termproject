@@ -47,7 +47,7 @@ input.addEventListener('input', () => {
         socket.emit("typing"); // 서버로 입력 시작 알림
     }
     
-    if (typingTimeout) { // 사용자가 이전에 설정한 타이머가 있다면 타이머 취소
+    if (typingTimeout) { // 사용자가 계속 입력중이면 타이머 초기화
         clearTimeout(typingTimeout);
     }
 
@@ -187,9 +187,22 @@ socket.on("notification", (msg) => {
   appendNotification(msg);
 });
 
+/*------수정---------*/
 function appendMessage(nickname, message) {
   const li = document.createElement("li");
-  li.innerHTML = `<strong>${nickname}</strong>: ${message}`; 
+  // 1. 타임스탬프 생성 (현재 시각 사용)
+  const now = new Date();
+  const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  // 2. 메시지 내용과 타임스탬프를 HTML에 추가
+  li.innerHTML = `<strong>${nickname}</strong>: ${message} <span class="timestamp">${timeString}</span>`; 
+  
+  // 3. 내 메시지와 상대방 메시지 구분 클래스 추가
+  if (nickname === socket.nickname) {
+    li.classList.add("my-message");
+  } else {
+    li.classList.add("other-message");
+  }
   messages.appendChild(li);
   messages.scrollTop = messages.scrollHeight;
 }
@@ -209,10 +222,10 @@ function appendpersonalMessage(data) {
   let textContent = '';
   
   if (data.type === 'sent_personal') {
-      textContent = `(${data.targetNickname}에게 보낸 메시지): ${data.message}`;
+      textContent = `(${data.targetNickname}님에게 보낸 메시지): ${data.message}`;
       li.classList.add("sent"); 
   } else if (data.type === 'received_personal') {
-      textContent = `(${data.sender}의 개인 메시지): ${data.message}`;
+      textContent = `(${data.sender}님이 메시지를 보냈습니다.): ${data.message}`;
       li.classList.add("received"); 
   }
   
@@ -259,18 +272,28 @@ function uploadFile(file) {
     });
 }
 
+/*-------------수정------------*/
 function appendFileMessage(data) {
     const li = document.createElement("li");
     let content = `<strong>${data.nickname || data.user_nickname}</strong>: `;
     
-    // DB에서 오는 데이터는 file_url, Socket.IO에서 오는 데이터는 fileUrl일 수 있으므로 통합 처리
-    const url = data.file_url || data.fileUrl; 
+    // 1. 타임스탬프 생성
+    const now = new Date(); //date객체 생성
+    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); //시간&분을 2자릿수로 변환
+    
+    // 2. 내 메시지와 상대방 메시지 구분 클래스 추가
+    const messageNickname = data.nickname || data.user_nickname; //메시지 발신자 닉네임과 현재 로그인된 닉네임 비교
+    if (messageNickname === socket.nickname) { 
+        li.classList.add("my-message");
+    } else {
+        li.classList.add("other-message");
+    }
     
     if (data.isImage || data.is_image) {
-        // 이미지일 경우 <img> 태그로 미리보기 생성
+      //img태그 사용해서 이미지 미리보기 설정, blank설정으로 url클릭하면 새 탭에서 실행
         content += `<a href="${url}" target="_blank">
                        [이미지] <br>
-                       <img src="${url}" alt="${data.message}" class="chat-image">
+                       <img src="${url}" alt="${data.message}" class="chat-image"> 
                     </a>`;
     } else {
         // 기타 파일일 경우 다운로드 링크 생성
@@ -278,9 +301,9 @@ function appendFileMessage(data) {
                        ⬇️ ${data.message}
                     </a>`;
     }
+    content += `<span class="timestamp">${timeString}</span>`;
     
     li.innerHTML = content;
     messages.appendChild(li);
     messages.scrollTop = messages.scrollHeight;
 }
-
