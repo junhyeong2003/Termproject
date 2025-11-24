@@ -14,17 +14,22 @@ app.use(express.static("public"));
 app.use('/uploads', express.static('uploads')); 
 
 const users = {}; 
+const typingUsers = {}; // 방별 입력 중인 사용자 닉네임 목록 (배열)
+
+function broadcastTypingStatus(room) {
+  const currentTypingUsers = typingUsers[room] || [];
+  io.to(room).emit("typing", currentTypingUsers);
+}
 
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 
-// 파일 필터 함수 (보안: 허용된 타입만)
 const fileFilter = (req, file, cb) => {
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
     if (allowedMimeTypes.includes(file.mimetype)) {
-        cb(null, true); // 허용
+        cb(null, true);
     } else {
         cb(new Error('허용되지 않는 파일 형식입니다. (jpeg, png, gif, pdf만 가능)'), false); // 거부
     }
@@ -64,7 +69,6 @@ io.on("connection", (socket) => {
 
     socket.nickname = nickname;
     socket.room = room;
-    //socket.id를 키로 사용하여 사용자 정보 저장
     users[socket.id] = {nickname: nickname, room: room};
 
     socket.join(room);
@@ -75,25 +79,71 @@ io.on("connection", (socket) => {
     broadcastUserList(room);
   });
 
-  socket.on("typing", () => { //typing이벤트가 올 때마다 실행됨
-    const { room, nickname } = socket; //socket객체에서 필요한 정보만 가져옴
-    if (room && nickname) { //하나라도 없으면 실행하지 않음
-      socket.broadcast.to(room).emit("typing notification", { nickname: nickname });
-    } //본인을 제외하고 같은 채팅방에 있는 사용자에게만 typing notification이벤트를 전송함
+  socket.on('react message', (data) => {
+    console.log("서버가 반응 수신:", data);
+
+    io.emit('reaction updated', {
+        messageId: data.messageId,
+        emojiCode: data.emojiCode,
+        count: 1 //해당 이모티콘이 몇 개 달렸는지 집계함
+    });
+});
+
+
+
+  // 메시지 반응 처리 이벤트 리스너
+  socket.on('react message', async (data) => {
+    const { messageId, emojiCode } = data;
+    const nickname = socket.nickname;
+    const room = socket.room;
+
+    // 기본 데이터 유효성 검사
+    if (!nickname || !messageId || !emojiCode) {
+        console.error('Reaction data missing.');
+        return; 
+    }
+
+    try {
+        const sql = 'INSERT INTO reactions (message_id, user_nickname, emoji_code) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE emoji_code = VALUES(emoji_code)';
+        await db.execute(sql, [messageId, nickname, emojiCode]); //db에 반응 정보를 저장한다
+
+        const count = await getReactionCount(messageId, emojiCode);
+        
+        //같은 방 모든 클라이언트에게 반응 업데이트를 전송
+        io.to(room).emit('reaction updated', { messageId, nickname, emojiCode, count });
+
+    } catch (err) {
+        console.error('Reaction DB update failed:', err);
+        // 실패 시 알람 보내기
+    }
+});
+
+  socket.on("typing start", () => { //
+    const { room, nickname } = socket;
+    if (!room || !nickname) return; //닉네임과 방 둘 다 있어야 함(하나만 설정해놨음)
+
+    typingUsers[room] = typingUsers[room] || [];
+
+    if (!typingUsers[room].includes(nickname)) {
+      typingUsers[room].push(nickname);
+      broadcastTypingStatus(room);
+    }
   });
 
-  socket.on("stop typing", () => {
+  socket.on("typing stop", () => {
     const { room, nickname } = socket;
-    if (room && nickname) {
-      socket.broadcast.to(room).emit("stop typing notification", { nickname: nickname });
+    if (!room || !nickname) return;
+
+    if (typingUsers[room]) {
+      typingUsers[room] = typingUsers[room].filter(user => user !== nickname);
+      broadcastTypingStatus(room);
     }
   });
 
   socket.on("get past messages", async (data) => {
     const {room} = data;
     try {
-      //DB에서 file_url과 is_image 컬럼도 함께 조회
-      const sql = 'SELECT user_nickname, message_text, timestamp, file_url, is_image FROM messages WHERE room_name = ? ORDER BY timestamp DESC LIMIT 50';
+      const sql = 'SELECT id, user_nickname, message_text, timestamp, file_url, is_image FROM messages WHERE room_name = ? ORDER BY timestamp DESC LIMIT 50';
       const [rows] = await db.execute(sql, [room]);
       const messages = rows.reverse();
   
@@ -135,19 +185,21 @@ io.on("connection", (socket) => {
       socket.emit("chat message", { ...personalData, type: 'sent_personal' });
       
     } else {
-      //일반 텍스트 메시지만 DB에 저장
       const messageData = { nickname: nickname, message: msg };
+      let messageId;
       console.log(`[${room}] ${nickname}: ${msg}`);
       
       try {
-        // file_url과 is_image는 null로 설정
         const sql = 'INSERT INTO messages (room_name, user_nickname, message_text, file_url, is_image) VALUES (?, ?, ?, NULL, 0)';
-        await db.execute(sql, [room, nickname, msg]); 
+        const [result] = await db.execute(sql, [room, nickname, msg]);
+
+        messageId = result.insertId; // DB에서 자동 생성된 ID를 추출
+        messageData.id = messageId; // messageData에 ID 포함
       } catch (err) {
         console.error('메시지 DB 저장 실패:', err);
       }
       
-      socket.broadcast.to(room).emit("chat message", messageData);
+      io.to(room).emit("chat message", messageData);
     }
   });
   
@@ -156,9 +208,14 @@ io.on("connection", (socket) => {
     const user = users[socket.id];
     if (user){
       const roomToUpdate = user.room;
-      socket.broadcast.to(user.room).emit("notification", `${user.nickname}님이 퇴장하셨습니다.`);
-      delete users[socket.id]; //socket.id를 키로 삭제
 
+      if (typingUsers[roomToUpdate]) {
+        typingUsers[roomToUpdate] = typingUsers[roomToUpdate].filter(currentTypingUser => currentTypingUser !== user.nickname);
+        broadcastTypingStatus(roomToUpdate);
+      }
+      
+      socket.broadcast.to(user.room).emit("notification", `${user.nickname}님이 퇴장하셨습니다.`);
+      delete users[socket.id]; 
       broadcastUserList(roomToUpdate);
     }
   });
@@ -166,27 +223,22 @@ io.on("connection", (socket) => {
 
 app.post('/upload', upload.single('chatFile'), async (req, res) => {
     
-    // 1. 파일 유무 확인
     if (!req.file) {
         return res.status(400).send('업로드된 파일이 없습니다.');
     }
 
-    // 2. 인증: FormData로 전송된 socketId를 기반으로 사용자 정보 조회
     const { socketId } = req.body;
     const user = users[socketId];
 
-    // 3. 인증 실패 처리
     if (!user) {
         return res.status(401).send('인증 실패: 유효하지 않은 사용자입니다.');
     }
 
-    // 4. 신뢰할 수 있는 사용자 정보 사용 (req.body 대신)
     const { nickname, room } = user;
     const fileUrl = `/uploads/${req.file.filename}`;
     const isImage = req.file.mimetype.startsWith('image/');
     const messageText = `${req.file.originalname} (파일)`;
 
-    // 5. 파일 메시지를 DB에 저장
     try {
         const sql = 'INSERT INTO messages (room_name, user_nickname, message_text, file_url, is_image) VALUES (?, ?, ?, ?, ?)';
         await db.execute(sql, [room, nickname, messageText, fileUrl, isImage]);
@@ -195,17 +247,15 @@ app.post('/upload', upload.single('chatFile'), async (req, res) => {
         return res.status(500).send('서버 오류: DB 저장 실패');
     }
 
-    // 6. Socket.IO로 클라이언트들에게 파일 공유 메시지 전송
     const messageData = { 
         nickname: nickname, 
         message: messageText,
-        file_url: fileUrl, // DB 컬럼명과 일치
-        is_image: isImage, // DB 컬럼명과 일치
+        file_url: fileUrl, 
+        is_image: isImage, 
     };
 
     io.to(room).emit("chat message", messageData);
 
-    // 7. 업로드 성공 응답 전송
     res.status(200).json({ fileUrl: fileUrl, originalName: req.file.originalname });
 });
 
