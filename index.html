@@ -126,11 +126,103 @@
         background-color: #e6f3ff;
     }
 
+  /* 마우스 우클릭 반응 메뉴 스타일 */
+  #reactionContextMenu {
+    display: none; /* 초기에는 숨김 */
+    position: absolute; /* 마우스 위치에 띄우기 위해 absolute 사용 */
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000; /* 다른 요소 위에 표시 */
+    padding: 8px;
+    white-space: nowrap; /* 이모지들이 한 줄에 나오도록 */
+  }
+
+  .reaction-option {
+    font-size: 1.5em;
+    padding: 5px 8px;
+    cursor: pointer;
+    transition: background-color 0.1s;
+  }
+
+  .reaction-option:hover {
+    background-color: #f0f0f0;
+    border-radius: 6px;
+  }
+
+  .reaction-container {
+    position: absolute;
+    bottom: -15px; /* 버블 아래에 배치 */
+    right: 5px;  /* 버블의 오른쪽 하단에 배치 */
+    display: flex;
+    gap: 5px;
+    z-index: 5;
+  }
+
+  .reaction-bubble {
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 2px 7px;
+    font-size: 0.8em;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* 1. 기본 다크 모드 설정 */
+  .dark-mode {
+    background-color: #2c3e50; /* 어두운 배경 */
+    color: #ecf0f1; /* 밝은 글자색 */
+  }
+
+  /* 2. 채팅 영역의 배경색 반전 */
+  .dark-mode #messages {
+      background-color: #34495e; 
+      border-color: #555;
+  }
+
+  /* 3. 입력창 및 버튼 색상 조정 (선택 사항) */
+  .dark-mode #form input {
+      background-color: #2c3e50;
+      color: #ecf0f1;
+      border-color: #555;
+  }
+
+  /* 4. 흰색이었던 메시지 버블 색상 조정 */
+  .dark-mode #messages li.other-message {
+      background-color: #446981; /* 어두운 상대방 버블 */
+      color: #ecf0f1;
+      border-color: #446981;
+  }
+  .dark-mode #messages li.my-message {
+      /* 내 버블은 구분되게 유지 */
+      background-color: #27ae60; 
+      color: white;
+  }
+
+</style>
+
+<div id="reactionContextMenu">
+    <span class="reaction-option" data-emoji="👍">👍</span>
+    <span class="reaction-option" data-emoji="❤️">❤️</span>
+    <span class="reaction-option" data-emoji="😂">😂</span>
+    <span class="reaction-option" data-emoji="😮">😮</span>
+    <span class="reaction-option" data-emoji="😢">😢</span>
+</div>
+
   </style>
 </head>
 <body>
   <h2>실시간 채팅</h2>
   
+  <div style="margin-top: 15px;">
+    <button id="themeToggle" type="button" 
+            style="padding: 8px 15px; border-radius: 5px; background-color: #6c757d; color: white; border: none; cursor: pointer;">
+        💡 테마 변경 (밝은/어두운)
+    </button>
+</div>
+
   <form id="loginForm">
     <h3>채팅방 입장</h3>
     <input id="nicknameInput" autocomplete="off" placeholder="닉네임 입력" required /><br>
