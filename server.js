@@ -85,7 +85,7 @@ io.on("connection", (socket) => {
     io.emit('reaction updated', {
         messageId: data.messageId,
         emojiCode: data.emojiCode,
-        count: 1 //해당 이모티콘이 몇 개 달렸는지 집계함
+        count: count
     });
 });
 
@@ -262,3 +262,4 @@ app.post('/upload', upload.single('chatFile'), async (req, res) => {
 server.listen(3000, () => {
   console.log("서버 실행중  http://localhost:3000");
 });
+
