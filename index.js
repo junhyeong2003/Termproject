@@ -12,7 +12,7 @@ const messages = document.getElementById("messages");
 const fileInput = document.getElementById("fileInput");
 const fileButton = document.getElementById("fileButton");
 const typingNotificationElement = document.getElementById("typingNotification"); 
-const themeToggle = document.getElementById("themeToggle"); // 배경 변환 버튼
+const themeToggle = document.getElementById("themeToggle");
 const reactionContextMenu = document.getElementById("reactionContextMenu");
 
 let isTyping = false;
@@ -21,7 +21,7 @@ const typingUsers = {};
 let currentTargetMessageId = null;
 
 // 채팅창 배경 설정하기
-function applyTheme(theme) { //<bosy>에 css클래스를 추가or삭제해서 다크모드로 변경됨
+function applyTheme(theme) { //body에 css클래스를 추가or삭제해서 다크모드로 변경됨
     const body = document.body;
     if (theme === 'dark') {
         body.classList.add('dark-mode');
@@ -63,9 +63,9 @@ function updateTypingNotification() {
 }
 
 function updateReactionUI(messageLi, emojiCode, count) {
-    let reactionArea = messageLi.querySelector('.reaction-container');
+    let reactionArea = messageLi.querySelector('.reaction-container'); //<-클래스를 가진 div찾음
     
-    if (!reactionArea) {
+    if (!reactionArea) { //반응 없으면 새div찾음
         reactionArea = document.createElement('div');
         reactionArea.className = 'reaction-container';
         messageLi.appendChild(reactionArea);
@@ -75,7 +75,7 @@ function updateReactionUI(messageLi, emojiCode, count) {
         <span class="reaction-bubble" data-emoji="${emojiCode}">
             ${emojiCode} ${count}
         </span>
-    `;
+    `;//실제 화면에 보이는 UI
 }
 
 function appendMessage(nickname, message, messageId) {
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentTargetMessageId = null;
     });
 
-    // 5. 이모지 옵션 클릭 이벤트 리스너 추가 (반응 전송)
+    // 5. 이모티콘 클릭 이벤트 리스너
     reactionContextMenu.addEventListener('click', (e) => {
         const option = e.target.closest('.reaction-option');
         if (option && currentTargetMessageId) {
@@ -398,3 +398,4 @@ function uploadFile(file) {
         fileInput.value = '';
     });
 }
+
