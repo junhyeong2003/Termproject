@@ -15,6 +15,12 @@ const typingNotificationElement = document.getElementById("typingNotification");
 const themeToggle = document.getElementById("themeToggle");
 const reactionContextMenu = document.getElementById("reactionContextMenu");
 
+const replyContextDisplay = document.getElementById("replyContextDisplay");
+const replyToNickname = document.getElementById("replyToNickname");
+const cancelReply = document.getElementById("cancelReply");
+let currentReplyToId = null; // 답글 대상 메시지의 ID
+let currentReplyToNickname = null; // 답글 대상의 닉네임
+
 let isTyping = false;
 let typingTimeout = undefined;
 const typingUsers = {}; 
@@ -75,10 +81,10 @@ function updateReactionUI(messageLi, emojiCode, count) {
         <span class="reaction-bubble" data-emoji="${emojiCode}">
             ${emojiCode} ${count}
         </span>
-    `;//실제 화면에 보이는 UI
+    `; //화면에 보이는 ui
 }
 
-function appendMessage(nickname, message, messageId) {
+function appendMessage(nickname, message, messageId, replyToId, repliedNickname, replyText) {
   const li = document.createElement("li");
   if(messageId) {
     li.setAttribute('data-message-id', messageId);
@@ -86,9 +92,17 @@ function appendMessage(nickname, message, messageId) {
   const now = new Date();
   const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  let replyContextHTML = '';
+  if (replyToId && repliedNickname && replyText) {
+      // replyText는 원본 메시지 내용을 표시합니다.
+      replyContextHTML = `<div class="reply-context">
+                            <strong>${repliedNickname}</strong>: ${replyText}
+                         </div>`;
+  }
+
   const reactionPlaceholder = messageId ? 
         `<div class="reaction-container" data-message-id="${messageId}"></div>` : '';
-  li.innerHTML = `<strong>${nickname}</strong>: ${message} ${reactionPlaceholder} <span class="timestamp">${timeString}</span>`; 
+  li.innerHTML = `${replyContextHTML}<strong>${nickname}</strong>: ${message} ${reactionPlaceholder} <span class="timestamp">${timeString}</span>`; 
 
   if (nickname === socket.nickname) {
         li.classList.add("my-message");
@@ -99,10 +113,17 @@ function appendMessage(nickname, message, messageId) {
     messages.scrollTop = messages.scrollHeight;
 }
 
-function appendFileMessage(data, messageId) {
+function appendFileMessage(data, messageId, replyToId, repliedNickname, replyText) {
     const li = document.createElement("li");
     let content = `<strong>${data.nickname || data.user_nickname}</strong>: `;
     
+    let replyContextHTML = '';
+    if (replyToId && repliedNickname && replyText) {
+      replyContextHTML = `<div class="reply-context">
+                            <strong>${repliedNickname}</strong>: ${replyText}
+                         </div>`;
+    }
+
     if(messageId) {
         li.setAttribute('data-message-id', messageId);
     }
@@ -133,7 +154,7 @@ function appendFileMessage(data, messageId) {
 
     content += `${reactionPlaceholder} <span class="timestamp">${timeString}</span>`;
 
-    li.innerHTML = content;
+    li.innerHTML = `${replyContextHTML} ${content} ${reactionPlaceholder} <span class="timestamp">${timeString}</span>`;
     messages.appendChild(li);
     messages.scrollTop = messages.scrollHeight;
 }
@@ -174,6 +195,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             currentTargetMessageId = messageLi.getAttribute('data-message-id');
 
+            const nicknameElement = messageLi.querySelector('strong');
+            // 닉네임 다음 노드의 텍스트를 메시지로 간주
+            const messageTextNode = nicknameElement ? nicknameElement.nextSibling : null;
+            
+            const repliedNickname = nicknameElement ? nicknameElement.textContent.trim() : '알 수 없음';
+            // 메시지 텍스트를 추출 (파일 메시지 등은 다르게 처리될 수 있음)
+            const repliedMessageText = messageTextNode ? messageTextNode.textContent.trim().split('\n')[0].replace(/:\s*$/, '').substring(0, 30) + '...' : '(파일 또는 알림)';
+            
+            // 메뉴 클릭 시 사용할 임시 데이터 저장
+            reactionContextMenu.dataset.repliedNickname = repliedNickname;
+            reactionContextMenu.dataset.repliedMessageText = repliedMessageText;
+
             reactionContextMenu.style.left = `${e.clientX}px`;
             reactionContextMenu.style.top = `${e.clientY}px`;
             reactionContextMenu.style.display = 'flex'; 
@@ -184,25 +217,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('click', () => {
         reactionContextMenu.style.display = 'none';
-        currentTargetMessageId = null;
     });
 
-    // 5. 이모티콘 클릭 이벤트 리스너
-    reactionContextMenu.addEventListener('click', (e) => {
-        const option = e.target.closest('.reaction-option');
-        if (option && currentTargetMessageId) {
-            const emojiCode = option.getAttribute('data-emoji');
+    // [추가] 답글 취소 버튼 이벤트 리스너
+    if (cancelReply) {
+        cancelReply.addEventListener('click', () => {
+            currentReplyToId = null;
+            currentReplyToNickname = null;
+            replyContextDisplay.style.display = 'none';
+        });
+    }
 
-            console.log("이모지 클릭:", emojiCode, "메시지ID:", currentTargetMessageId);
-            
-            //서버로 반응 이벤트 전송
-            socket.emit('react message', {
-                messageId: currentTargetMessageId,
-                emojiCode: emojiCode
-            });
-            // 전송 후 바로 숨김 처리
+    //이모티콘 옵션 클릭 이벤트 리스너
+    reactionContextMenu.addEventListener('click', (e) => {
+        const option = e.target.closest('.reaction-option, .reply-option');
+        if (option && currentTargetMessageId) {
+            if (!option.classList.contains('reply-option')) {
+                const emojiCode = option.getAttribute('data-emoji');
+
+                // 서버로 반응 이벤트 전송
+                socket.emit('react message', {
+                    messageId: currentTargetMessageId,
+                    emojiCode: emojiCode
+                });
+            }
+
+            // 2. 답글 달기 처리
+            if (option.classList.contains('reply-option')) {
+                currentReplyToId = currentTargetMessageId;
+                currentReplyToNickname = reactionContextMenu.dataset.repliedNickname;
+                const repliedMessageText = reactionContextMenu.dataset.repliedMessageText;
+
+                // 답글 UI 업데이트
+                replyToNickname.innerHTML = `<strong>${currentReplyToNickname}</strong>: ${repliedMessageText}`;
+                replyContextDisplay.style.display = 'flex'; 
+                input.focus();
+            }
+
             reactionContextMenu.style.display = 'none'; 
-            currentTargetMessageId = null; 
+            currentTargetMessageId = null; // ID는 메뉴가 사라진 후 초기화 
         }
     });
 });
@@ -250,6 +303,7 @@ socket.on("login success", (data) => {
   socket.nickname = data.nickname; 
   socket.room = data.room; 
   socket.id = data.socketId; 
+  socket.profileUrl = data.profileUrl || 'default_url'; // 서버가 보내준 프로필 URL 저장
   
   loginForm.style.display = 'none';
   chatArea.style.display = 'block';
@@ -398,4 +452,3 @@ function uploadFile(file) {
         fileInput.value = '';
     });
 }
-
