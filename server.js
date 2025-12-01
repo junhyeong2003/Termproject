@@ -67,6 +67,8 @@ io.on("connection", (socket) => {
   socket.on("login", (data) => {
     const{nickname, room} = data;
 
+    const profileUrl = "path/to/default/avatar.png";
+
     socket.nickname = nickname;
     socket.room = room;
     users[socket.id] = {nickname: nickname, room: room};
@@ -74,7 +76,7 @@ io.on("connection", (socket) => {
     socket.join(room);
     socket.broadcast.to(room).emit("notification", ` ${nickname}님이 입장하셨습니다.`);
 
-    socket.emit("login success", {room: room, nickname: nickname, socketId: socket.id});
+    socket.emit("login success", {room: room, nickname: nickname, socketId: socket.id, profileUrl: profileUrl});
     socket.emit("ready to load messages", {room: room});
     broadcastUserList(room);
   });
@@ -97,8 +99,7 @@ io.on("connection", (socket) => {
     const nickname = socket.nickname;
     const room = socket.room;
 
-    // 기본 데이터 유효성 검사
-    if (!nickname || !messageId || !emojiCode) {
+    if (!nickname || !messageId || !emojiCode) {//닉네임, 메시지, 이모티콘
         console.error('Reaction data missing.');
         return; 
     }
@@ -120,7 +121,7 @@ io.on("connection", (socket) => {
 
   socket.on("typing start", () => { //
     const { room, nickname } = socket;
-    if (!room || !nickname) return; //닉네임과 방 둘 다 있어야 함(하나만 설정해놨음)
+    if (!room || !nickname) return; //닉네임과 방 둘 다 있어야 함
 
     typingUsers[room] = typingUsers[room] || [];
 
@@ -156,6 +157,9 @@ io.on("connection", (socket) => {
 
   socket.on("chat message", async (msg) => {
     const{room, nickname} = socket;
+    // [추가] 클라이언트가 답글 데이터를 보냈다고 가정
+    let replyToId = msg.replyToId || null; 
+    let messageText = msg.messageText || msg; // 클라이언트가 텍스트를 객체로 보냈다면 처리
 
     if(!nickname || !room){
       console.log("로그인 정보 없음");
@@ -190,11 +194,12 @@ io.on("connection", (socket) => {
       console.log(`[${room}] ${nickname}: ${msg}`);
       
       try {
-        const sql = 'INSERT INTO messages (room_name, user_nickname, message_text, file_url, is_image) VALUES (?, ?, ?, NULL, 0)';
-        const [result] = await db.execute(sql, [room, nickname, msg]);
+        const sql = 'INSERT INTO messages (room_name, user_nickname, message_text, reply_to_id, file_url, is_image) VALUES (?, ?, ?, ?, NULL, 0)';
+        const [result] = await db.execute(sql, [room, nickname, messageText, replyToId]);
 
         messageId = result.insertId; // DB에서 자동 생성된 ID를 추출
         messageData.id = messageId; // messageData에 ID 포함
+        messageData.replyToId = replyToId; // 응답 데이터에 답글 ID 포함
       } catch (err) {
         console.error('메시지 DB 저장 실패:', err);
       }
@@ -262,4 +267,3 @@ app.post('/upload', upload.single('chatFile'), async (req, res) => {
 server.listen(3000, () => {
   console.log("서버 실행중  http://localhost:3000");
 });
-
