@@ -6,11 +6,11 @@
   <style>
     body { 
       font-family: Arial, Helvetica, sans-serif; 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center; 
-      min-width: 650px; /* PC에서 창을 줄여도 내용이 잘리지 않도록 최소 너비 지정 */
-      overflow-x: auto; /* 650px보다 작아지면 가로 스크롤 생성 */
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        min-width: 650px; 
+        overflow-x: auto;
     }
 
     /*로그인*/
@@ -31,66 +31,138 @@
     border: 1px solid #ddd; padding: 10px; background-color: #f9f9f9; /* 배경색 추가 */
   }
     #messages li {
-    padding: 8px 10px; margin-bottom: 8px; border-bottom: none; 
-    clear: both; /* 양쪽 정렬 후, 강제 줄 바꿈 */
-    display: table; /* 버블이 내용만큼만 공간을 차지하도록 설정 */
-    max-width: 75%; /* 메시지 버블 최대 너비 */
-    border-radius: 12px; /* 모서리를 둥글게 만들어 버블 형태 */
-    position: relative;
-    line-height: 1.4;
+        list-style-type: none;
+        padding: 0;
+        margin: 10px 0;
+        clear: both;
+        display: flex; 
+        max-width: 100%; 
+        word-wrap: break-word;
+        align-items: flex-start !important;
   }
+
+    .profile-pic {
+        width: 40px; 
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        flex-shrink: 0;
+    }
+    .profile-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 50px;
+    }
+
+    li.other-message {
+        justify-content: flex-start;
+        flex-direction: row; 
+        margin-right: auto; 
+        max-width: 70%; 
+    }
     #messages li:last-child {border-bottom: none; }
 
-  /* 상대방 메시지 (기본) */
+  /* 상대방 메시지 */
   #messages li.other-message {
-    background-color: #ffffff; 
-    border: 1px solid #e0e0e0;
-    float: left; /* 왼쪽 정렬 */
-    text-align: left;
-  }
-  
-  /* 내 메시지 */
-  #messages li.my-message {
-    background-color: #dcf8c6; /* 연한 녹색/파란색 */
-    float: right; /* 오른쪽 정렬 */
+    background-color: transparent !important; 
+    border: none   !important;
+    float: left;
     text-align: left;
   }
 
-  /* 타임스탬프 스타일 */
+  li.other-message .profile-container {
+        margin-right: 10px; 
+    }
+    li.other-message .nickname-text {
+        text-align: left;
+    }
+  
+  /* 내 메시지 */
+  li.my-message {
+        justify-content: flex-end;
+        flex-direction: row-reverse;
+        margin-left: auto; 
+        max-width: 70%;
+        align-self: flex-end;
+  }
+
+  li.my-message .profile-container {
+        margin-left: 10px; 
+        margin-right: 0;
+    }
+    li.my-message .message-area {
+        align-items: flex-end;
+    }
+    li.my-message .nickname-text {
+        display: none;
+    }
+
+    .message-area {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        max-width: calc(100% - 50px);
+    }
+
+    .main-content-wrapper {
+        padding: 8px 12px;
+        border-radius: 12px;
+        line-height: 1.3;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+    }
+    li.my-message .main-content-wrapper {
+        background-color: #dcf8c6;
+    }
+    li.other-message .main-content-wrapper {
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+    }
+
+    .nickname-text {
+        font-size: 0.85em;
+        color: #555;
+        margin-bottom: 4px;
+        font-weight: bold;
+    }
+
+  /* ------------------------타임스탬프 스타일-------------------------- */
   .timestamp {
-    display: block; /* 줄 바꿈 처리 */
+    display: block;
     font-size: 0.75em;
     color: #888;
     margin-top: 3px;
-    text-align: right; /* 버블 내에서 오른쪽 정렬 */
+    margin-left: auto;
+    text-align: right;
   }
-    
-    /* 알림 메시지 스타일 */
+    /* -------------------------------------알림 메시지 스타일---------------------------*/
     #messages li.notification {
     font-style: italic; color: #868; text-align: center; background-color: transparent; 
     border: none; border-bottom: 1px dashed #ccc; padding: 4px 0; margin: 10px auto;
     width: 100%;
   } 
 
-    /* 입력 폼 스타일 */
-    #form { display: flex; margin-top: 10px; align-items: stretch; /* 세로 정렬 맞추기 */ }
+    /* ---------------------------------------------------입력 폼 스타일---------------------- */
+    #form { display: flex; margin-top: 10px; align-items: stretch; }
     #input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; font-size: 1em; }
     #form button[type="submit"] { width: 80px; padding: 10px; background-color: #47a7f0; color: white; border: none; cursor: pointer; }
 
-    /*귓속말 구분 스타일*/
+    /*------------------------귓속말 구분 스타일-----------------*/
     #messages li.personal {font-style: italic;padding: 8px 10px;}
     #messages li.personal.sent {
     color: #007bff; background-color: #e6f3ff; text-align: right;}
     #messages li.personal.received {
     color: #880000; background-color: #fff0f0; text-align: left;}
     
-    #fileButton { /* 파일 버튼은 입력창 높이에 맞게 설정 */
+    /*-------------------------파일 버튼-----------------*/
+    #fileButton {
     background-color: #6c757d; 
     margin-right: 5px; 
     width: 40px;
     }
 
-    /* 채팅창의 이미지 미리보기 스타일 */
+    /* ----------------이미지 미리보기 스타일----------- */
     img.chat-image {
       max-width: 200px;
       max-height: 200px;
@@ -100,7 +172,7 @@
       margin-top: 5px;
     }
     
-    /* 파일 다운로드 링크 스타일 */
+    /* ------------------파일 다운로드 링크 스타일------------------*/
     a.file-download {
       color: #b1b5b9;
       text-decoration: none;
@@ -110,7 +182,7 @@
       text-decoration: underline;
     }
     
-    /* 입력 중 알림 */
+    /* -------------------입력 중 알림-------------------- */
     #typingNotification {
         font-style: italic; 
         color: #888; 
@@ -121,22 +193,22 @@
         height: 1.2em; /* 공간 확보 */
     }
 
-    #messages.drag-over { /* 드래그 앤 드롭 영역 */
+    #messages.drag-over {
         border: 3px dashed #007bff;
         background-color: #e6f3ff;
     }
 
-  /* 마우스 우클릭 반응 메뉴 스타일 */
+  /* --------------------------------마우스 우클릭 반응 메뉴 스타일------------------- */
   #reactionContextMenu {
-    display: none; /* 초기에는 숨김 */
-    position: absolute; /* 마우스 위치에 띄우기 위해 absolute 사용 */
-    background-color: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    z-index: 1000; /* 다른 요소 위에 표시 */
-    padding: 8px;
-    white-space: nowrap; /* 이모지들이 한 줄에 나오도록 */
+        display: none;
+        position: absolute; 
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 1000; 
+        padding: 8px;
+        align-items: center; 
   }
 
   .reaction-option {
@@ -153,8 +225,8 @@
 
   .reaction-container {
     position: absolute;
-    bottom: -15px; /* 버블 아래에 배치 */
-    right: 5px;  /* 버블의 오른쪽 하단에 배치 */
+    bottom: -15px; 
+    right: 5px; 
     display: flex;
     gap: 5px;
     z-index: 5;
@@ -170,42 +242,39 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
-  /* 1. 기본 다크 모드 설정 */
+  /*--------------------------다크 모드 설정----------------------- */
   .dark-mode {
-    background-color: #2c3e50; /* 어두운 배경 */
-    color: #ecf0f1; /* 밝은 글자색 */
+    background-color: #2c3e50;
+    color: #ecf0f1;
   }
 
-  /* 2. 채팅 영역의 배경색 반전 */
   .dark-mode #messages {
       background-color: #34495e; 
       border-color: #555;
   }
 
-  /* 3. 입력창&버튼 색상 조정 */
   .dark-mode #form input {
       background-color: #2c3e50;
       color: #ecf0f1;
       border-color: #555;
   }
 
-  /* 4. 흰색이었던 메시지 버블 색상 조정 */
   .dark-mode #messages li.other-message {
-      background-color: #446981; /* 어두운 상대방 버블 */
+      background-color: #446981;
       color: #ecf0f1;
       border-color: #446981;
   }
   .dark-mode #messages li.my-message {
-      /* 내 버블은 구분되게 유지 */
       background-color: #27ae60; 
       color: white;
   }
 
+  /*----------------------------답글 기능-------------------------*/
   .reply-context {
       border-left: 3px solid #007bff;
       padding-left: 5px;
       margin-bottom: 5px;
-      background-color: #f0f8ff; /* 답글 배경 */
+      background-color: #f0f8ff;
       font-size: 0.9em;
       color: #444;
   }
@@ -214,43 +283,40 @@
   }
 
   .reply-context {
-        background-color: #e0e0e0; /* 답글 버블 배경색 */
+        background-color: #e0e0e0; 
         border-radius: 5px;
         padding: 5px 8px;
         margin-bottom: 5px;
         font-size: 0.8em;
         color: #555;
-        border-left: 3px solid #007bff; /* 파란색 왼쪽 테두리 */
-        word-wrap: break-word; /* 긴 텍스트 줄바꿈 */
-        max-width: 80%; /* 답글 버블의 최대 너비 */
+        border-left: 3px solid #007bff; 
+        word-wrap: break-word; 
+        max-width: 80%; 
     }
 
-    /* 내 메시지에 대한 답글 버블 */
     .my-message .reply-context {
-        background-color: #d1e7dd; /* 내 메시지에 대한 답글 배경색 */
-        border-left-color: #28a745; /* 초록색 왼쪽 테두리 */
-        margin-left: auto; /* 오른쪽 정렬 */
+        border-left-color: #a8dadc;
     }
 
-    /* 다른 사람 메시지에 대한 답글 버블 */
     .other-message .reply-context {
-        background-color: #e0e0e0; /* 다른 사람 메시지에 대한 답글 배경색 */
-        border-left-color: #007bff; /* 파란색 왼쪽 테두리 */
-        margin-right: auto; /* 왼쪽 정렬 */
+        background-color: #e0e0e0; 
+        border-left-color: #007bff; 
     }
 
-    /* 답글 컨텍스트 내의 닉네임 강조 */
+    li.my-message .message-area .reply-context {
+        align-self: flex-end; /* 내 메시지 답글 컨텍스트 오른쪽 정렬 */
+    }
+
     .reply-context strong {
         color: #333;
     }
 
-    /* 답글 컨텍스트의 최대 높이 제한 및 스크롤바 */
     .reply-context {
-        max-height: 50px; /* 최대 높이 */
-        overflow: hidden; /* 넘치는 내용은 숨김 */
-        text-overflow: ellipsis; /* 넘치는 내용 ... 처리 */
+        max-height: 50px; 
+        overflow: hidden;
+        text-overflow: ellipsis; 
         display: -webkit-box;
-        -webkit-line-clamp: 2; /* 2줄까지만 표시 */
+        -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
     }
 </style>
@@ -264,7 +330,7 @@
     <span class="reaction-option reply-option" data-action="reply" style="font-size: 1em; padding: 5px 10px;">답글 달기</span>
 </div>
 
-  </style>
+
 </head>
 <body>
   <h2>실시간 채팅</h2>
