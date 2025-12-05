@@ -26,6 +26,102 @@ let typingTimeout = undefined;
 const typingUsers = {}; 
 let currentTargetMessageId = null;
 
+/* ==========================================================
+   공통 유틸: XSS 방지용 HTML escape
+========================================================== */
+function escapeHTML(str = '') {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/* ==========================================================
+   공통 메시지 렌더 함수
+   - 텍스트/파일 메시지를 모두 이 함수로 렌더링
+========================================================== */
+function renderMessageBubble({
+    nickname,
+    profileUrl,
+    isMine,
+    messageId,
+    replyToId,
+    repliedNickname,
+    replyText,
+    contentHTML    // 실제 말풍선 안에 들어갈 HTML (텍스트/파일 등)
+}) {
+    const li = document.createElement("li");
+
+    if (messageId) {
+        li.dataset.messageId = messageId;
+    }
+
+    // 내/상대 메시지 클래스
+    li.classList.add(isMine ? "my-message" : "other-message");
+
+    // 프로필 이미지
+    const safeProfileUrl = profileUrl || "/images/default_avatar.png";
+    const profilePicHtml = `
+        <img src="${escapeHTML(safeProfileUrl)}"
+             alt="${escapeHTML(nickname)} 프로필"
+             class="profile-pic">
+    `;
+
+    // 타임스탬프
+    const now = new Date();
+    const timeString = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+
+    // 답글 컨텍스트
+    let replyContextHTML = "";
+    if (replyToId) {
+        let cleanedReplyText = replyText || "내용 없음";
+
+        if (repliedNickname && cleanedReplyText.startsWith(repliedNickname + ":")) {
+            cleanedReplyText = cleanedReplyText.substring(repliedNickname.length + 1).trim();
+        }
+
+        replyContextHTML = `
+            <div class="reply-context">
+                <strong>${escapeHTML(repliedNickname || "원문")}</strong>:
+                ${escapeHTML(cleanedReplyText)}
+            </div>
+        `;
+    }
+
+    // 반응 컨테이너 placeholder
+    const reactionPlaceholder = messageId
+        ? `<div class="reaction-container" data-message-id="${messageId}"></div>`
+        : "";
+
+    // 말풍선 내부 콘텐츠
+    const bubbleContent = `
+        ${contentHTML}
+        ${reactionPlaceholder}
+    `;
+
+    // 최종 HTML 구조
+    li.innerHTML = `
+        <div class="profile-container">
+            ${profilePicHtml}
+        </div>
+        <div class="message-area">
+            <span class="nickname-text"><strong>${escapeHTML(nickname)}</strong></span>
+            ${replyContextHTML}
+            <div class="main-content-wrapper">
+                ${bubbleContent}
+            </div>
+            <span class="timestamp-line">${escapeHTML(timeString)}</span>
+        </div>
+    `;
+
+    return li;
+}
+
 // 채팅창 배경 설정하기
 function applyTheme(theme) { //body에 css클래스를 추가or삭제해서 다크모드로 변경됨
     const body = document.body;
@@ -68,97 +164,95 @@ function updateTypingNotification() {
     messages.scrollTop = messages.scrollHeight; 
 }
 
+/* ==========================================================
+   반응 UI 업데이트
+   - reaction-container는 main-content-wrapper 안에 위치
+========================================================== */
 function updateReactionUI(messageLi, emojiCode, count) {
-    let reactionArea = messageLi.querySelector('.reaction-container'); //<-클래스를 가진 div찾음
+    let wrapper = messageLi.querySelector('.main-content-wrapper');
+    if (!wrapper) wrapper = messageLi;
+
+    let reactionArea = wrapper.querySelector('.reaction-container');
     
-    if (!reactionArea) { //반응 없으면 새div찾음
+    if (!reactionArea) {
         reactionArea = document.createElement('div');
         reactionArea.className = 'reaction-container';
-        messageLi.appendChild(reactionArea);
+        wrapper.appendChild(reactionArea);
     }
     
     reactionArea.innerHTML = `
         <span class="reaction-bubble" data-emoji="${emojiCode}">
             ${emojiCode} ${count}
         </span>
-    `; //화면에 보이는 ui
+    `;
 }
 
-function appendMessage(nickname, message, messageId, replyToId, repliedNickname, replyText) {
-  const li = document.createElement("li");
-  if(messageId) {
-    li.setAttribute('data-message-id', messageId);
-  }
-  const now = new Date();
-  const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+/* ==========================================================
+   텍스트 메시지 append
+========================================================== */
+function appendMessage(nickname, message, messageId, replyToId, repliedNickname, replyText, profileUrl) {
+    const isMine = nickname === socket.nickname;
 
-  let replyContextHTML = '';
-  if (replyToId && repliedNickname && replyText) {
-      // replyText는 원본 메시지 내용을 표시합니다.
-      replyContextHTML = `<div class="reply-context">
-                            <strong>${repliedNickname}</strong>: ${replyText}
-                         </div>`;
-  }
+    const li = renderMessageBubble({
+        nickname,
+        profileUrl,
+        isMine,
+        messageId,
+        replyToId,
+        repliedNickname,
+        replyText,
+        contentHTML: escapeHTML(message || "")
+    });
 
-  const reactionPlaceholder = messageId ? 
-        `<div class="reaction-container" data-message-id="${messageId}"></div>` : '';
-  li.innerHTML = `${replyContextHTML}<strong>${nickname}</strong>: ${message} ${reactionPlaceholder} <span class="timestamp">${timeString}</span>`; 
-
-  if (nickname === socket.nickname) {
-        li.classList.add("my-message");
-    } else {
-        li.classList.add("other-message");
-    }
     messages.appendChild(li);
     messages.scrollTop = messages.scrollHeight;
 }
 
-function appendFileMessage(data, messageId, replyToId, repliedNickname, replyText) {
-    const li = document.createElement("li");
-    let content = `<strong>${data.nickname || data.user_nickname}</strong>: `;
-    
-    let replyContextHTML = '';
-    if (replyToId && repliedNickname && replyText) {
-      replyContextHTML = `<div class="reply-context">
-                            <strong>${repliedNickname}</strong>: ${replyText}
-                         </div>`;
-    }
+/* ==========================================================
+   파일 메시지 append
+========================================================== */
+function appendFileMessage(data, messageId, replyToId, repliedNickname, replyText, profileUrl) {
+    const messageNickname = data.nickname || data.user_nickname || '익명';
+    const isMine = messageNickname === socket.nickname;
 
-    if(messageId) {
-        li.setAttribute('data-message-id', messageId);
-    }
+    const url = data.file_url || data.fileUrl || "#";
+    const safeUrl = escapeHTML(url);
+    const fileName = escapeHTML(data.message || "파일");
 
-    const url = data.file_url || data.fileUrl; 
-    const now = new Date(); 
-    const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const messageNickname = data.nickname || data.user_nickname;
-    if (messageNickname === socket.nickname) { 
-        li.classList.add("my-message");
-    } else {
-        li.classList.add("other-message");
-    }
-    
+    let fileContentHtml = '';
     if (data.isImage || data.is_image) {
-        content += `<a href="${url}" target="_blank">
-                       [이미지] <br>
-                       <img src="${url}" alt="${data.message}" class="chat-image"> 
-                    </a>`;
+        fileContentHtml = `
+            <a href="${safeUrl}" target="_blank">
+                [이미지] <br>
+                <img src="${safeUrl}" alt="image" class="chat-image">
+            </a>
+        `;
     } else {
-        content += `<a href="${url}" target="_blank" download class="file-download">
-                       ⬇️ ${data.message}
-                    </a>`;
+        fileContentHtml = `
+            <a href="${safeUrl}" target="_blank" download class="file-download">
+                ⬇️ ${fileName}
+            </a>
+        `;
     }
-    const reactionPlaceholder = messageId ? 
-            `<div class="reaction-container" data-message-id="${messageId}"></div>` : '';
 
-    content += `${reactionPlaceholder} <span class="timestamp">${timeString}</span>`;
+    const li = renderMessageBubble({
+        nickname: messageNickname,
+        profileUrl,
+        isMine,
+        messageId,
+        replyToId,
+        repliedNickname,
+        replyText,
+        contentHTML: fileContentHtml
+    });
 
-    li.innerHTML = `${replyContextHTML} ${content} ${reactionPlaceholder} <span class="timestamp">${timeString}</span>`;
     messages.appendChild(li);
     messages.scrollTop = messages.scrollHeight;
 }
 
+/* ==========================================================
+   알림 메시지
+========================================================== */
 function appendNotification(msg) {
   const li = document.createElement("li");
   li.textContent = msg;
@@ -181,11 +275,14 @@ function appendpersonalMessage(data) {
       li.classList.add("received"); 
   }
   
-  li.innerHTML = `<em>${textContent}</em>`; 
+  li.innerHTML = `<em>${escapeHTML(textContent)}</em>`; 
   messages.appendChild(li);
   messages.scrollTop = messages.scrollHeight;
 }
 
+/* ==========================================================
+   DOMContentLoaded - 우클릭 메뉴 / 답글 / 반응
+========================================================== */
 document.addEventListener('DOMContentLoaded', () => {
     messages.addEventListener('contextmenu', (e) => { //우클릭 이벤트 감지함
         const messageLi = e.target.closest('#messages > li'); 
@@ -195,13 +292,14 @@ document.addEventListener('DOMContentLoaded', () => {
             
             currentTargetMessageId = messageLi.getAttribute('data-message-id');
 
-            const nicknameElement = messageLi.querySelector('strong');
-            // 닉네임 다음 노드의 텍스트를 메시지로 간주
-            const messageTextNode = nicknameElement ? nicknameElement.nextSibling : null;
-            
+            const nicknameElement = messageLi.querySelector('.nickname-text strong');
+            const mainContentWrapper = messageLi.querySelector('.main-content-wrapper');
+            const textNode = mainContentWrapper ? mainContentWrapper.textContent || '' : '';
+
             const repliedNickname = nicknameElement ? nicknameElement.textContent.trim() : '알 수 없음';
-            // 메시지 텍스트를 추출 (파일 메시지 등은 다르게 처리될 수 있음)
-            const repliedMessageText = messageTextNode ? messageTextNode.textContent.trim().split('\n')[0].replace(/:\s*$/, '').substring(0, 30) + '...' : '(파일 또는 알림)';
+            const repliedMessageText = textNode
+                ? textNode.trim().split('\n')[0].substring(0, 30) + '...'
+                : '(파일 또는 알림)';
             
             // 메뉴 클릭 시 사용할 임시 데이터 저장
             reactionContextMenu.dataset.repliedNickname = repliedNickname;
@@ -249,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const repliedMessageText = reactionContextMenu.dataset.repliedMessageText;
 
                 // 답글 UI 업데이트
-                replyToNickname.innerHTML = `<strong>${currentReplyToNickname}</strong>: ${repliedMessageText}`;
+                replyToNickname.innerHTML = `<strong>${escapeHTML(currentReplyToNickname)}</strong>: ${escapeHTML(repliedMessageText)}`;
                 replyContextDisplay.style.display = 'flex'; 
                 input.focus();
             }
@@ -303,7 +401,7 @@ socket.on("login success", (data) => {
   socket.nickname = data.nickname; 
   socket.room = data.room; 
   socket.id = data.socketId; 
-  socket.profileUrl = data.profileUrl || 'default_url'; // 서버가 보내준 프로필 URL 저장
+  socket.profileUrl = data.profileUrl || '/images/default_avatar.png'; // 서버가 보내준 프로필 URL 저장
   
   loginForm.style.display = 'none';
   chatArea.style.display = 'block';
@@ -315,12 +413,19 @@ socket.on("ready to load messages", (data) => {
 });
 
 socket.on("past messages", (rows) => {
+
     rows.forEach(msg => {
         const messageId = msg.id;
+
+        const repliedNickname = msg.replied_nickname || null;
+        const replyText = msg.reply_text || null;
+        const replyToId = msg.reply_to_id || null; 
+        const profileUrl = msg.profile_url || '/images/default_avatar.png';
+
         if (msg.file_url) {
-             appendFileMessage(msg, messageId);
+             appendFileMessage(msg, messageId, replyToId, repliedNickname, replyText, profileUrl);
         } else {
-             appendMessage(msg.user_nickname, msg.message_text, messageId);
+             appendMessage(msg.user_nickname, msg.message_text, messageId, replyToId, repliedNickname, replyText, profileUrl);
         }
     });
     
@@ -333,12 +438,23 @@ form.addEventListener("submit", (e) => {
   const msg = input.value.trim();
   
   if (msg) {
-    socket.emit("chat message", msg);
-    
-    if (!msg.startsWith('/w ')) {
-        appendMessage(socket.nickname, msg); 
+    if (msg.startsWith('/w ')) {
+        socket.emit("chat message", msg); // 귓속말은 문자열 그대로 전송
+    } else {
+        let messagePayload = { messageText: msg };
+        
+        if (currentReplyToId) {
+            messagePayload.replyToId = currentReplyToId;
+            messagePayload.repliedNickname = currentReplyToNickname; 
+            messagePayload.replyText = replyToNickname.textContent.replace('답글 대상: ', '');
+            
+            currentReplyToId = null;
+            currentReplyToNickname = null;
+            replyContextDisplay.style.display = 'none';
+        }
+        socket.emit("chat message", messagePayload); // 객체 페이로드 전송
     }
-    
+
     input.value = "";
   }
   
@@ -405,13 +521,18 @@ socket.on("chat message", (data) => {
       delete typingUsers[data.nickname];
       updateTypingNotification();
   }
-    
+
+  const replyToId = data.reply_to_id || null;
+  const repliedNickname = data.replied_nickname || null;
+  const replyText = data.reply_text || null;
+  const profileUrl = data.profileUrl || '/images/default_avatar.png';  
+
   if (data.ispersonal) {
     appendpersonalMessage(data);
   } else if (data.file_url) {
-    appendFileMessage(data, data.id); 
+    appendFileMessage(data, data.id, replyToId, repliedNickname, replyText, profileUrl); 
   } else {
-    appendMessage(data.nickname, data.message, data.id);
+    appendMessage(data.nickname, data.message, data.id, replyToId, repliedNickname, replyText, profileUrl);
   }
 });
 
