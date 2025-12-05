@@ -62,24 +62,54 @@ function broadcastUserList(room) {
 }
 
 io.on("connection", (socket) => {
-  console.log("사용자 연결됨:", socket.id);
-  
-  socket.on("login", (data) => {
-    const{nickname, room} = data;
+  console.log("사용자 연결됨:", socket.id);
+  
+  // ⭐ [수정] 비동기 처리를 위해 async 키워드 추가
+socket.on("login", async (data) => {
+  const{nickname, room} = data;
+    
+    // 기본 프로필 URL 설정
+  let profileUrl = "/images/default_avatar.png"; // 웹에서 접근 가능한 경로로 수정 (필요하다면)
 
-    const profileUrl = "path/to/default/avatar.png";
+    // ⭐ [추가] DB에서 프로필 URL을 조회하고 없으면 기본값으로 삽입
+  try {
+      // 1. 프로필 URL 조회
+    const selectSql = 'SELECT profile_url FROM user_profiles WHERE nickname = ?';
+    const [rows] = await db.execute(selectSql, [nickname]);
 
-    socket.nickname = nickname;
-    socket.room = room;
-    users[socket.id] = {nickname: nickname, room: room};
+    if (rows.length > 0) {
+            // 프로필이 존재하는 경우
+        profileUrl = rows[0].profile_url;
+    } else {
+            // 프로필이 없는 경우 (첫 로그인 등): 기본 프로필을 DB에 삽입
+        const insertSql = 'INSERT INTO user_profiles (nickname, profile_url) VALUES (?, ?)';
+        await db.execute(insertSql, [nickname, profileUrl]);
+    }
+} catch (err) {
+    console.error('프로필 조회/생성 실패:', err);
+        // DB 오류 발생 시에도 기본 URL로 진행
+}
 
-    socket.join(room);
-    socket.broadcast.to(room).emit("notification", ` ${nickname}님이 입장하셨습니다.`);
+  socket.nickname = nickname;
+  socket.room = room;
+    // ⭐ [추가] socket 객체에 profileUrl 저장  socket.profileUrl = profileUrl; 
+    
+  users[socket.id] = {nickname: nickname, room: room, profileUrl: profileUrl}; // ⭐ users 객체에도 추가 (선택 사항)
 
-    socket.emit("login success", {room: room, nickname: nickname, socketId: socket.id, profileUrl: profileUrl});
-    socket.emit("ready to load messages", {room: room});
-    broadcastUserList(room);
-  });
+  socket.join(room);
+  socket.broadcast.to(room).emit("notification", ` ${nickname}님이 입장하셨습니다.`);
+
+    // ⭐ [수정] profileUrl을 login success 데이터에 포함하여 클라이언트로 전송
+  socket.emit("login success", {
+    room: room, 
+    nickname: nickname, 
+    socketId: socket.id, 
+    profileUrl: profileUrl
+});
+    
+  socket.emit("ready to load messages", {room: room});
+  broadcastUserList(room);
+});
 
   socket.on('react message', (data) => {
     console.log("서버가 반응 수신:", data);
@@ -90,8 +120,6 @@ io.on("connection", (socket) => {
         count: count
     });
 });
-
-
 
   // 메시지 반응 처리 이벤트 리스너
   socket.on('react message', async (data) => {
@@ -157,16 +185,37 @@ io.on("connection", (socket) => {
 
   socket.on("chat message", async (msg) => {
     const{room, nickname} = socket;
-    // [추가] 클라이언트가 답글 데이터를 보냈다고 가정
-    let replyToId = msg.replyToId || null; 
-    let messageText = msg.messageText || msg; // 클라이언트가 텍스트를 객체로 보냈다면 처리
-
+    socket.nickname = nickname; 
+    socket.room = room;
+    users[socket.id] = { nickname, room }; 
+    socket.join(room);
+    
     if(!nickname || !room){
       console.log("로그인 정보 없음");
       return;
     }
+
+    let messageText;
+    let replyToId = null;
+    let repliedNickname = null;
+    let replyText = null;
     
-    const personalMatch = msg.match(/^\/w\s+(\S+)\s+(.*)/);
+    if (typeof msg === 'object' && msg.messageText) {
+        // 1. 답글 기능 사용 시 (객체 페이로드)
+        messageText = msg.messageText;
+        replyToId = msg.replyToId || null;
+        repliedNickname = msg.repliedNickname || null;
+        replyText = msg.replyText || null;
+    } else if (typeof msg === 'string') {
+        // 2. 귓속말 또는 이전 버전의 메시지 (문자열)
+        messageText = msg;
+    } else {
+        console.error("잘못된 메시지 형식:", msg);
+        return;
+    }
+    
+    // ⭐ [수정] messageText에 대해 .match()를 호출합니다. (TypeError 해결)
+    const personalMatch = messageText.match(/^\/w\s+(\S+)\s+(.*)/);
 
     if (personalMatch) {
       const targetNickname = personalMatch[1];
@@ -189,24 +238,35 @@ io.on("connection", (socket) => {
       socket.emit("chat message", { ...personalData, type: 'sent_personal' });
       
     } else {
-      const messageData = { nickname: nickname, message: msg };
+      
+      // ⭐ [수정] messageData에 모든 답글 정보를 포함합니다.
+      const messageData = { 
+          nickname: nickname, 
+          message: messageText, // messageText 사용
+          reply_to_id: replyToId, 
+          replied_nickname: repliedNickname, 
+          reply_text: replyText,
+          profileUrl: socket.profileUrl
+      };
+      
       let messageId;
-      console.log(`[${room}] ${nickname}: ${msg}`);
+      console.log(`[${room}] ${nickname}: ${messageText}`); // messageText 사용
       
       try {
         const sql = 'INSERT INTO messages (room_name, user_nickname, message_text, reply_to_id, file_url, is_image) VALUES (?, ?, ?, ?, NULL, 0)';
+        // messageText와 replyToId를 DB에 전달합니다.
         const [result] = await db.execute(sql, [room, nickname, messageText, replyToId]);
 
         messageId = result.insertId; // DB에서 자동 생성된 ID를 추출
         messageData.id = messageId; // messageData에 ID 포함
-        messageData.replyToId = replyToId; // 응답 데이터에 답글 ID 포함
+        // messageData에 이미 답글 정보가 포함되었으므로 추가적인 할당은 필요 없습니다.
       } catch (err) {
         console.error('메시지 DB 저장 실패:', err);
       }
       
       io.to(room).emit("chat message", messageData);
     }
-  });
+});
   
   socket.on("disconnect", () => {
     console.log("사용자 연결 종료:", socket.id);
