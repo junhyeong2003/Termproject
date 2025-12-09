@@ -11,19 +11,15 @@ const server = http.createServer(app);
 const io = new Server(server); 
 
 app.use(express.static("public"));
-app.use('/uploads', express.static('uploads')); 
+app.use('/uploads', express.static('uploads'));
+app.use('/profile_uploads', express.static('public/profile_uploads'));
 
 const users = {}; 
-const typingUsers = {}; // 방별 입력 중인 사용자 닉네임 목록 (배열)
+const typingUsers = {};
 
-function broadcastTypingStatus(room) {
-  const currentTypingUsers = typingUsers[room] || [];
-  io.to(room).emit("typing", currentTypingUsers);
-}
-
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+const PROFILE_DIR = 'public/profile_uploads';
+if (!fs.existsSync(PROFILE_DIR)) {
+    fs.mkdirSync(PROFILE_DIR, { recursive: true });
 }
 
 const fileFilter = (req, file, cb) => {
@@ -34,21 +30,50 @@ const fileFilter = (req, file, cb) => {
         cb(new Error('허용되지 않는 파일 형식입니다. (jpeg, png, gif, pdf만 가능)'), false); // 거부
     }
 };
-
+//---------------------------------------storage----------------------------------
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, uploadDir); 
+        cb(null, 'public/profile_uploads/'); 
+    },
+    filename: function (req, file, cb) {
+        const ext = path.extname(file.originalname);
+        cb(null, 'profile_' + Date.now() + ext);
+    }
+});
+const profileStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'public/profile_uploads/');
     },
     filename: function (req, file, cb) {
         cb(null, Date.now() + '_' + file.originalname);
     }
 });
-
-const upload = multer({ 
-    storage: storage,
-    limits: { fileSize: 1024 * 1024 * 5 }, // 5MB 파일 크기 제한
-    fileFilter: fileFilter 
+const uploadProfile = multer({ storage: profileStorage });
+const chatStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');  // ← 실제 경로와 URL이 일치하도록 구성
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '_' + file.originalname);
+    }
 });
+const upload = multer({
+    storage: chatStorage,
+    limits: { fileSize: 1024 * 1024 * 5 },
+    fileFilter: fileFilter
+});
+//---------------------------------------------------------------
+
+
+function broadcastTypingStatus(room) {
+  const currentTypingUsers = typingUsers[room] || [];
+  io.to(room).emit("typing", currentTypingUsers);
+}
+
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
 
 function getUsersInRoom(room) {
   const roomUsers = Array.from(Object.values(users))
@@ -61,16 +86,29 @@ function broadcastUserList(room) {
   io.to(room).emit("user list", currentUsers);
 }
 
+async function getReactionCount(messageId, emojiCode) {
+    try {
+        const sql = `
+            SELECT COUNT(*) AS reactionCount
+            FROM reactions
+            WHERE message_id = ? AND emoji_code = ?
+        `;
+        const [rows] = await db.execute(sql, [messageId, emojiCode]);
+        return rows[0].reactionCount || 0;
+    } catch (err) {
+        console.error("getReactionCount error:", err);
+        return 0;
+    }
+}
+
 io.on("connection", (socket) => {
   console.log("사용자 연결됨:", socket.id);
-  
   // ⭐ [수정] 비동기 처리를 위해 async 키워드 추가
 socket.on("login", async (data) => {
-  const{nickname, room} = data;
+  const{nickname, room, profileUrl: clientProfileUrl} = data;
     
     // 기본 프로필 URL 설정
   let profileUrl = "/images/default_avatar.png"; // 웹에서 접근 가능한 경로로 수정 (필요하다면)
-
     // ⭐ [추가] DB에서 프로필 URL을 조회하고 없으면 기본값으로 삽입
   try {
       // 1. 프로필 URL 조회
@@ -80,6 +118,11 @@ socket.on("login", async (data) => {
     if (rows.length > 0) {
             // 프로필이 존재하는 경우
         profileUrl = rows[0].profile_url;
+    } else if (clientProfileUrl) {
+                // 2. DB에 정보가 없고 클라이언트가 유효한 URL을 보낸 경우 (업로드 직후 로그인)
+                profileUrl = clientProfileUrl;
+                const insertSql = 'INSERT INTO user_profiles (nickname, profile_url) VALUES (?, ?)';
+                await db.execute(insertSql, [nickname, profileUrl]);
     } else {
             // 프로필이 없는 경우 (첫 로그인 등): 기본 프로필을 DB에 삽입
         const insertSql = 'INSERT INTO user_profiles (nickname, profile_url) VALUES (?, ?)';
@@ -92,10 +135,10 @@ socket.on("login", async (data) => {
 
   socket.nickname = nickname;
   socket.room = room;
+    socket.profileUrl = profileUrl;
     // ⭐ [추가] socket 객체에 profileUrl 저장  socket.profileUrl = profileUrl; 
     
   users[socket.id] = {nickname: nickname, room: room, profileUrl: profileUrl}; // ⭐ users 객체에도 추가 (선택 사항)
-
   socket.join(room);
   socket.broadcast.to(room).emit("notification", ` ${nickname}님이 입장하셨습니다.`);
 
@@ -111,19 +154,9 @@ socket.on("login", async (data) => {
   broadcastUserList(room);
 });
 
-  socket.on('react message', (data) => {
-    console.log("서버가 반응 수신:", data);
-
-    io.emit('reaction updated', {
-        messageId: data.messageId,
-        emojiCode: data.emojiCode,
-        count: count
-    });
-});
-
   // 메시지 반응 처리 이벤트 리스너
   socket.on('react message', async (data) => {
-    const { messageId, emojiCode } = data;
+    const { messageId, emojiCode, } = data;
     const nickname = socket.nickname;
     const room = socket.room;
 
@@ -133,13 +166,19 @@ socket.on("login", async (data) => {
     }
 
     try {
-        const sql = 'INSERT INTO reactions (message_id, user_nickname, emoji_code) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE emoji_code = VALUES(emoji_code)';
+        const sql = `
+          INSERT INTO reactions (message_id, user_nickname, emoji_code, reacted_at)
+          VALUES (?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE
+            emoji_code = VALUES(emoji_code),
+            reacted_at = NOW();
+        `;
         await db.execute(sql, [messageId, nickname, emojiCode]); //db에 반응 정보를 저장한다
 
         const count = await getReactionCount(messageId, emojiCode);
         
         //같은 방 모든 클라이언트에게 반응 업데이트를 전송
-        io.to(room).emit('reaction updated', { messageId, nickname, emojiCode, count });
+        io.to(room).emit('reaction updated', { messageId, user: nickname, emojiCode, count });
 
     } catch (err) {
         console.error('Reaction DB update failed:', err);
@@ -172,7 +211,7 @@ socket.on("login", async (data) => {
   socket.on("get past messages", async (data) => {
     const {room} = data;
     try {
-      const sql = 'SELECT id, user_nickname, message_text, timestamp, file_url, is_image FROM messages WHERE room_name = ? ORDER BY timestamp DESC LIMIT 50';
+      const sql = 'SELECT m.id, m.user_nickname, m.message_text, m.timestamp, m.file_url, m.is_image, u.profile_url FROM messages m LEFT JOIN user_profiles u ON m.user_nickname = u.nickname WHERE m.room_name = ? ORDER BY m.timestamp DESC LIMIT 50';
       const [rows] = await db.execute(sql, [room]);
       const messages = rows.reverse();
   
@@ -185,11 +224,6 @@ socket.on("login", async (data) => {
 
   socket.on("chat message", async (msg) => {
     const{room, nickname} = socket;
-    socket.nickname = nickname; 
-    socket.room = room;
-    users[socket.id] = { nickname, room }; 
-    socket.join(room);
-    
     if(!nickname || !room){
       console.log("로그인 정보 없음");
       return;
@@ -239,6 +273,7 @@ socket.on("login", async (data) => {
       
     } else {
       
+      const latestProfileUrl = users[socket.id]?.profileUrl || '/images/default_avatar.png';
       // ⭐ [수정] messageData에 모든 답글 정보를 포함합니다.
       const messageData = { 
           nickname: nickname, 
@@ -246,7 +281,7 @@ socket.on("login", async (data) => {
           reply_to_id: replyToId, 
           replied_nickname: repliedNickname, 
           reply_text: replyText,
-          profileUrl: socket.profileUrl
+          profileUrl: latestProfileUrl
       };
       
       let messageId;
@@ -287,7 +322,10 @@ socket.on("login", async (data) => {
 });
 
 app.post('/upload', upload.single('chatFile'), async (req, res) => {
-    
+    const nickname = req.body.nickname;
+    const room = req.body.room;            // ★★ 반드시 필요! (수정)
+    const file = req.file;
+
     if (!req.file) {
         return res.status(400).send('업로드된 파일이 없습니다.');
     }
@@ -299,10 +337,17 @@ app.post('/upload', upload.single('chatFile'), async (req, res) => {
         return res.status(401).send('인증 실패: 유효하지 않은 사용자입니다.');
     }
 
-    const { nickname, room } = user;
     const fileUrl = `/uploads/${req.file.filename}`;
     const isImage = req.file.mimetype.startsWith('image/');
-    const messageText = `${req.file.originalname} (파일)`;
+    const messageText = req.body.message || '';
+
+     let userProfileUrl = '/images/default_avatar.png';
+    for (let [id, userData] of Object.entries(users)) {
+        if (userData.nickname === nickname) {
+            userProfileUrl = userData.profileUrl || '/images/default_avatar.png';
+            break;
+        }
+    }
 
     try {
         const sql = 'INSERT INTO messages (room_name, user_nickname, message_text, file_url, is_image) VALUES (?, ?, ?, ?, ?)';
@@ -313,15 +358,63 @@ app.post('/upload', upload.single('chatFile'), async (req, res) => {
     }
 
     const messageData = { 
-        nickname: nickname, 
+        nickname, 
         message: messageText,
         file_url: fileUrl, 
-        is_image: isImage, 
+        is_image: isImage,
+        profileUrl: userProfileUrl
     };
 
     io.to(room).emit("chat message", messageData);
+    res.json({ file_url: fileUrl });
+});
 
-    res.status(200).json({ fileUrl: fileUrl, originalName: req.file.originalname });
+app.post('/upload_profile', uploadProfile.single('profileImage'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const nickname = req.body.nickname; // ⭐ 클라이언트가 닉네임을 보내야 함
+    if (!nickname) {
+        // 인증 실패 또는 닉네임 누락 처리
+        return res.status(401).json({ error: "Nickname required for profile update." });
+    }
+    const fileUrl = '/profile_uploads/' + req.file.filename;
+    console.log("저장된 프로필 URL:", fileUrl);
+
+    try {
+        // 2. DB에 프로필 URL 갱신
+        const updateSql = `
+            INSERT INTO user_profiles (nickname, profile_url)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE profile_url = VALUES(profile_url)
+        `;
+        await db.execute(updateSql, [nickname, fileUrl]);
+        
+        for (let [id, userData] of Object.entries(users)) {
+        if (userData.nickname === nickname) {
+            const clientSocket = io.sockets.sockets.get(id);
+            if (clientSocket) {
+                clientSocket.profileUrl = fileUrl; // ★ 수정 24번 해결
+            }
+            users[id].profileUrl = fileUrl;
+        }
+    }
+        // 3. 서버 메모리의 users 객체 갱신 (선택적: 실시간 채팅 프로필 업데이트용)
+        // 현재 접속 중인 사용자의 socket.id를 찾아 users 객체 갱신
+        Object.keys(users).forEach(socketId => {
+            if (users[socketId].nickname === nickname) {
+                users[socketId].profileUrl = fileUrl;
+                // 해당 사용자에게 새로운 URL을 포함한 실시간 이벤트 전송 (선택적)
+                io.to(socketId).emit("profile updated", { profileUrl: fileUrl }); 
+            }
+        });
+
+    } catch (err) {
+        console.error("프로필 DB 갱신 실패:", err);
+        return res.status(500).json({ error: "DB update failed" });
+    }
+    res.json({ profileUrl: fileUrl });
 });
 
 server.listen(3000, () => {
