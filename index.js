@@ -443,8 +443,17 @@ loginForm.addEventListener('submit', async function(e) { // ⭐ async 함수로 
     // UI 전환
     loginForm.style.display = 'none';
     chatArea.style.display = 'block';
-    roomInfo.textContent = `현재 방: ${room} (당신의 닉네임: ${nickname})`;
+    roomInfo.textContent = `${room}방`;
 });
+
+function getRoomDisplayName(room) {
+    const map = {
+        "public_room": "1학년 채팅방",
+        "dev_room": "2학년 채팅방",
+        "test_room": "3학년 채팅방"
+    };
+    return map[room] || room; // 매핑 없으면 원래 이름 사용
+}
 
 socket.on("login", async (data) => {
     const { nickname, room, profileUrl } = data;
@@ -456,9 +465,12 @@ socket.on("login success", (data) => {
   socket.id = data.socketId; 
   socket.profileUrl = data.profileUrl || '/images/default_avatar.png'; // 서버가 보내준 프로필 URL 저장
   
+  document.getElementById("profilePreviewSidebar").src = socket.profileUrl;
+  document.getElementById("profilePreview").src = socket.profileUrl;
+
   loginForm.style.display = 'none';
   chatArea.style.display = 'block';
-  roomInfo.textContent = `현재 방: ${data.room} (당신의 닉네임: ${data.nickname})`;
+  roomInfo.textContent = `${getRoomDisplayName(data.room)} (${data.nickname}님)`;
 
   const myProfileImgElement = document.getElementById("myChatProfileImg"); 
   if (myProfileImgElement) {
@@ -646,6 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
     profileImageInput    = document.getElementById("profileImageInput");
     selectProfileBtn = document.getElementById("selectProfileBtn");
     profilePreview   = document.getElementById("profilePreview");
+    const logoutBtn = document.getElementById("logoutBtn");
 
     console.log("profileImageInput:", profileImageInput);
     console.log("selectProfileBtn:", selectProfileBtn);
@@ -670,4 +683,25 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         reader.readAsDataURL(file);
     });
+
+    logoutBtn.addEventListener("click", () => {
+    socket.emit("logout", { nickname: socket.nickname, room: socket.room });
+    // UI 되돌리기
+    loginForm.style.display = "block";
+    chatArea.style.display = "none";
+
+    // 입력 폼, 사이드바 프로필, 소켓 정보 초기화
+    nicknameInput.value = "";
+    roomSelect.value = "dev_room";
+
+    document.getElementById("profilePreviewSidebar").src = "/images/default_avatar.png";
+
+    document.getElementById("profilePreview").src = "/images/default_avatar.png";
+
+    socket.nickname = null;
+    socket.room = null;
+    socket.profileUrl = null;
+
+    document.getElementById("messages").innerHTML = "";
+});
 });
