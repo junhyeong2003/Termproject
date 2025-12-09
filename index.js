@@ -21,6 +21,9 @@ const cancelReply = document.getElementById("cancelReply");
 let currentReplyToId = null; // 답글 대상 메시지의 ID
 let currentReplyToNickname = null; // 답글 대상의 닉네임
 
+let profileImageInput;
+let selectProfileBtn;
+let profilePreview;
 let isTyping = false;
 let typingTimeout = undefined;
 const typingUsers = {}; 
@@ -50,7 +53,7 @@ function renderMessageBubble({
     replyToId,
     repliedNickname,
     replyText,
-    contentHTML    // 실제 말풍선 안에 들어갈 HTML (텍스트/파일 등)
+    contentHTML
 }) {
     const li = document.createElement("li");
 
@@ -58,25 +61,22 @@ function renderMessageBubble({
         li.dataset.messageId = messageId;
     }
 
-    // 내/상대 메시지 클래스
     li.classList.add(isMine ? "my-message" : "other-message");
 
-    // 프로필 이미지
     const safeProfileUrl = profileUrl || "/images/default_avatar.png";
+
     const profilePicHtml = `
         <img src="${escapeHTML(safeProfileUrl)}"
              alt="${escapeHTML(nickname)} 프로필"
              class="profile-pic">
     `;
 
-    // 타임스탬프
     const now = new Date();
     const timeString = now.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit"
     });
 
-    // 답글 컨텍스트
     let replyContextHTML = "";
     if (replyToId) {
         let cleanedReplyText = replyText || "내용 없음";
@@ -93,18 +93,7 @@ function renderMessageBubble({
         `;
     }
 
-    // 반응 컨테이너 placeholder
-    const reactionPlaceholder = messageId
-        ? `<div class="reaction-container" data-message-id="${messageId}"></div>`
-        : "";
-
-    // 말풍선 내부 콘텐츠
-    const bubbleContent = `
-        ${contentHTML}
-        ${reactionPlaceholder}
-    `;
-
-    // 최종 HTML 구조
+    // li 내부 HTML 구조 생성
     li.innerHTML = `
         <div class="profile-container">
             ${profilePicHtml}
@@ -113,11 +102,21 @@ function renderMessageBubble({
             <span class="nickname-text"><strong>${escapeHTML(nickname)}</strong></span>
             ${replyContextHTML}
             <div class="main-content-wrapper">
-                ${bubbleContent}
+                ${contentHTML}
             </div>
             <span class="timestamp-line">${escapeHTML(timeString)}</span>
         </div>
     `;
+
+    // ⭐ reaction-container를 DOM으로 생성해서 main-content-wrapper 밑에 붙임
+    if (messageId) {
+        const reactionContainer = document.createElement("div");
+        reactionContainer.classList.add("reaction-container");
+        reactionContainer.dataset.messageId = messageId;
+
+        const wrapper = li.querySelector(".main-content-wrapper");
+        wrapper.appendChild(reactionContainer);
+    }
 
     return li;
 }
@@ -170,7 +169,7 @@ function updateTypingNotification() {
 ========================================================== */
 function updateReactionUI(messageLi, emojiCode, count) {
     let wrapper = messageLi.querySelector('.main-content-wrapper');
-    if (!wrapper) wrapper = messageLi;
+    if (!wrapper) wrapper = messageLi;  
 
     let reactionArea = wrapper.querySelector('.reaction-container');
     
@@ -191,6 +190,7 @@ function updateReactionUI(messageLi, emojiCode, count) {
    텍스트 메시지 append
 ========================================================== */
 function appendMessage(nickname, message, messageId, replyToId, repliedNickname, replyText, profileUrl) {
+    console.log("PROFILE URL 전달됨:", profileUrl);//------------------------------------------test
     const isMine = nickname === socket.nickname;
 
     const li = renderMessageBubble({
@@ -208,9 +208,6 @@ function appendMessage(nickname, message, messageId, replyToId, repliedNickname,
     messages.scrollTop = messages.scrollHeight;
 }
 
-/* ==========================================================
-   파일 메시지 append
-========================================================== */
 function appendFileMessage(data, messageId, replyToId, repliedNickname, replyText, profileUrl) {
     const messageNickname = data.nickname || data.user_nickname || '익명';
     const isMine = messageNickname === socket.nickname;
@@ -364,9 +361,9 @@ socket.on('reaction updated', (data) => {
     
     const messageLi = document.querySelector(`li[data-message-id="${messageId}"]`);// data-message-id 속성을 가진 HTML요소를 찾음
     
-    if (messageLi) {
-        updateReactionUI(messageLi, emojiCode, count); // UI에 실시간으로 적용하는 함수 호출
-    }
+    if (!messageLi) return;
+
+    updateReactionUI(messageLi, emojiCode, count);
 });
 
 input.addEventListener('input', () => {
@@ -387,14 +384,70 @@ input.addEventListener('input', () => {
     }, 3000);
 });
 
-loginForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const nickname = nicknameInput.value.trim();
-  const room = roomSelect.value;
-  
-  if (nickname) {
-    socket.emit("login", { nickname: nickname, room: room });
-  }
+loginForm.addEventListener('submit', async function(e) { // ⭐ async 함수로 변경 ⭐
+    e.preventDefault();
+
+    const nickname = nicknameInput.value.trim();
+    const room = roomSelect.value;
+
+    if (!nickname) {
+        alert("닉네임을 입력해 주세요.");
+        return;
+    }
+    
+    const profileFile = profileImageInput ? profileImageInput.files[0] : null;
+    let profileUrl = "/images/default_avatar.png";
+
+    socket.nickname = nickname;
+    socket.profileUrl = profileUrl;
+
+    // -----------------------
+    // 1) 프로필 사진 업로드
+    // -----------------------
+    if (profileFile) {
+        const formData = new FormData();
+        formData.append("profileImage", profileFile);
+        formData.append("nickname", nickname);
+
+
+        try {
+            const response = await fetch("/upload_profile", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.profileUrl) {
+                profileUrl = result.profileUrl;  // 서버가 준 URL로 대체
+            } else {
+                console.warn("프로필 업로드 실패:", result.error || response.statusText);
+                alert("프로필 업로드 실패. 기본 프로필로 진행합니다.");
+            }
+        } catch (err) {
+            console.error("Profile upload error:", err);
+            alert("프로필 업로드 중 오류 발생. 기본 프로필 사용.");
+        }
+    }
+    socket.profileUrl = profileUrl;
+    // --- 2. 채팅방 입장 (업로드된 URL을 포함하여 입장) ---
+     // 소켓 객체에 URL 저장
+    
+    // 서버에 닉네임, 방 이름, 그리고 최종 프로필 URL을 함께 전달
+    socket.emit('login', { 
+        nickname: nickname, 
+        room: room, 
+        profileUrl: profileUrl
+    });
+    
+    // UI 전환
+    loginForm.style.display = 'none';
+    chatArea.style.display = 'block';
+    roomInfo.textContent = `현재 방: ${room} (당신의 닉네임: ${nickname})`;
+});
+
+socket.on("login", async (data) => {
+    const { nickname, room, profileUrl } = data;
 });
 
 socket.on("login success", (data) => {
@@ -406,6 +459,22 @@ socket.on("login success", (data) => {
   loginForm.style.display = 'none';
   chatArea.style.display = 'block';
   roomInfo.textContent = `현재 방: ${data.room} (당신의 닉네임: ${data.nickname})`;
+
+  const myProfileImgElement = document.getElementById("myChatProfileImg"); 
+  if (myProfileImgElement) {
+    myProfileImgElement.src = socket.profileUrl;
+  }
+});
+
+socket.on("profile updated", (data) => {
+    console.log("프로필 업데이트 감지:", data.profileUrl);
+    socket.profileUrl = data.profileUrl;
+
+    // 로그인 화면의 프로필 프리뷰 갱신 (있을 경우)
+    const myImg = document.getElementById("myChatProfileImg");
+    if (myImg) myImg.src = data.profileUrl;
+
+    // 이미 채팅창에 있는 내 메시지들의 프로필 이미지도 업데이트하려면 여기서 반복문 추가 가능
 });
 
 socket.on("ready to load messages", (data) => {
@@ -573,3 +642,32 @@ function uploadFile(file) {
         fileInput.value = '';
     });
 }
+document.addEventListener("DOMContentLoaded", () => {
+    profileImageInput    = document.getElementById("profileImageInput");
+    selectProfileBtn = document.getElementById("selectProfileBtn");
+    profilePreview   = document.getElementById("profilePreview");
+
+    console.log("profileImageInput:", profileImageInput);
+    console.log("selectProfileBtn:", selectProfileBtn);
+    console.log("profilePreview:", profilePreview);
+
+    if (!profileImageInput || !selectProfileBtn || !profilePreview) {
+        console.warn("프로필 관련 요소를 찾지 못했습니다. id 확인 필요");
+        return;
+    }
+    selectProfileBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        profileImageInput.click();
+    });
+
+    profileImageInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();   // ✅ 대문자 F, R
+        reader.onload = e => {
+            profilePreview.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+});
