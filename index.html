@@ -348,6 +348,90 @@
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
     }
+/*--------------------------------------------*/
+    body {
+    background: #f5f6fa;
+    align-items: stretch !important; /* 전체 폭 사용 */
+}
+
+/* 전체 레이아웃을 3단 그리드로 구성 */
+#chatAreaWrapper {
+    display: grid;
+    grid-template-columns: 220px 1fr 220px;
+    gap: 0;
+    width: 100%;
+    max-width: 1300px;
+    margin: 20px auto;
+    height: 85vh;
+}
+
+/* 왼쪽 사이드바 */
+#leftSidebar {
+    background: #ffffff;
+    border-right: 1px solid #ddd;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#leftSidebar h3 {
+    margin-bottom: 10px;
+}
+
+#leftSidebar .profile-area {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+/* 중앙 채팅 */
+#centerChat {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border-right: 1px solid #ddd;
+    padding: 0 10px;
+}
+
+/* 오른쪽 유저 패널 */
+#rightUsers {
+    background: #ffffff;
+    border-left: 1px solid #ddd;
+    padding: 15px;
+}
+
+#rightUsers h4 {
+    margin-bottom: 10px;
+}
+
+#userList li {
+    padding: 6px;
+    border-bottom: 1px solid #eee;
+}
+
+/* 메시지 영역 확장 */
+#messages {
+    height: calc(75vh - 100px);
+    max-height: none;
+}
+
+/* 입력창 고정 */
+#form {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    padding-top: 10px;
+}
+
+/* 상단 방 정보 영역 */
+#roomInfo {
+    padding: 10px 0;
+    margin-bottom: 10px;
+    background: #fafafa;
+    border-bottom: 1px solid #ddd;
+    text-align: center;
+}
+
 </style>
 
 <div id="reactionContextMenu">
@@ -363,13 +447,6 @@
 </head>
 <body>
   <h2>소프트웨어공학과 오픈채팅방</h2>
-  
-  <div style="margin-top: 15px;">
-    <button id="themeToggle" type="button" 
-            style="padding: 8px 15px; border-radius: 5px; background-color: #6c757d; color: white; border: none; cursor: pointer;">
-        💡 테마 변경 (밝은/어두운)
-    </button>
-</div>
 
   <form id="loginForm">
     <h3>채팅방 입장</h3>
@@ -382,39 +459,68 @@
     <button id="selectProfileBtn" type="button">프로필 사진 선택</button>
     <input id="nicknameInput" autocomplete="off" placeholder="닉네임 입력" required /><br>
     <select id="roomSelect">
-      <option value="public_room_1">1학년</option>
+      <option value="public_room">1학년</option>
       <option value="dev_room">2학년</option>
       <option value="test_room">3학년</option>
     </select><br>
     <button type="submit">입장하기</button>
   </form>
 
-  <div id="chatArea" style="display:none;">
-    <div id="roomInfo"></div>
-    <div style="display: flex;">
-        <div style="flex-grow: 1;">
-            <ul id="messages"></ul>
-            
-            <p id="typingNotification" style="display: none;"></p>
+  <div id="chatArea" style="display:none; width:100%;">
 
-            <div id="replyContextDisplay" style="display: none; border-left: 3px solid #007bff; padding: 5px 10px; margin-bottom: 5px; background-color: #f0f8ff;">
-                <strong>답글 대상:</strong> <span id="replyToNickname"></span>
-                <button id="cancelReply" type="button" style="float: right; border: none; background: none; cursor: pointer; color: #888;">X</button>
+    <div id="chatAreaWrapper">
+      /*왼쪽 사이드바 부분*/
+        <div id="leftSidebar">
+            <h3>내 정보</h3>
+            <div class="profile-area">
+                <img id="profilePreviewSidebar" src="/images/default_avatar.png"
+                     style="width:70px; height:70px; border-radius:50%; object-fit:cover; border:2px solid #ddd;">
+                <p id="nicknameSidebar" style="margin-top:8px; font-weight:bold;"></p>
             </div>
-            
+            <div style="margin-top: 15px;">
+    <button id="themeToggle" type="button" 
+            style="padding: 8px 15px; border-radius: 30px; background-color: #6c757d; color: white; border: none; cursor: pointer;">
+        💡 테마 변경 (밝은/어두운)
+    </button>
+
+    <button id="logoutBtn"
+        style="margin-top: 5px; padding: 8px 15px; border-radius: 30px; background-color: #6c757d; color: white; border: none; cursor: pointer;">
+    🚪 로그아웃
+</button>
+</div>
+        </div>
+
+        <!-- ===== 중앙 채팅 메인 영역 ===== -->
+        <div id="centerChat">
+            <div id="roomInfo"></div>
+
+            <ul id="messages"></ul>
+
+            <p id="typingNotification" style="display:none;"></p>
+
+            <!-- 답글 박스 유지 -->
+            <div id="replyContextDisplay" style="display:none; border-left:3px solid #007bff; padding:5px 10px; background:#eef5ff; margin-bottom:5px;">
+                <strong>답글 대상:</strong> <span id="replyToNickname"></span>
+                <button id="cancelReply" type="button" style="float:right; border:none; background:none; cursor:pointer; color:#888;">X</button>
+            </div>
+
+            <!-- 메시지 입력창 -->
             <form id="form" action="">
-                <input type="file" id="fileInput" style="display: none;">
+                <input type="file" id="fileInput" style="display:none;">
                 <button type="button" id="fileButton">📎</button>
-                
                 <input id="input" autocomplete="off" placeholder="메시지 입력..." />
                 <button type="submit">전송</button>
             </form>
-            </div>
-        <div style="width: 200px; padding-left: 10px; border-left: 1px solid #ccc;">
-            <ul id="userList">
-            </ul>
         </div>
+
+        <!-- ===== 오른쪽 접속자 목록 ===== -->
+        <div id="rightUsers">
+            <h4>현재 접속자</h4>
+            <ul id="userList" style="padding:0; list-style:none;"></ul>
+        </div>
+
     </div>
+
 </div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="index.js"></script>
